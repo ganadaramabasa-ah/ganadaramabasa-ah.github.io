@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>도쿄 마스터플랜 & 슈퍼 트래커 (Firebase 관제탑 버젼)</title>
+   
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#1e293b">
+   
+    <!-- CDN 라이브러리 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+    <!-- Firebase 모듈 및 전역 동기화 설정 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue, push, update, remove, onDisconnect } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-database.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyAuIqNqo95yvdQIZgCqFPKxxIfKrEKflZs",
+            authDomain: "trip-8bda5.firebaseapp.com",
+            projectId: "trip-8bda5",
+            storageBucket: "trip-8bda5.firebasestorage.app",
+            messagingSenderId: "359380780124",
+            appId: "1:359380780124:web:868c5fa96f482c3e2a5299",
+            measurementId: "G-JD5NXRTFZK",
+            databaseURL: "https://trip-8bda5-default-rtdb.firebaseio.com"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // 전역변수 할당 (어디서든 접근 가능하도록)
+        window.sysDb = db; 
+        window.firebaseConfig = firebaseConfig;
+        window.initializeApp = initializeApp; 
+        window.getDatabase = getDatabase; 
+        window.ref = ref;
+        window.set = set; 
+        window.onValue = onValue; 
+        window.push = push;
+        window.update = update;
+        window.remove = remove;
+        window.onDisconnect = onDisconnect; 
+
+        // 시스템 준비 완료 이벤트 발송
+        window.dispatchEvent(new Event('firebaseLoaded'));
+    </script>
+
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; color: #1e293b; transition: all 0.3s; -webkit-tap-highlight-color: transparent; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb !important; font-weight: 700; background-color: #eff6ff; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .bomb-flash { animation: bombFlash 0.1s infinite alternate; }
+        @keyframes bombFlash { from { background-color: #ef4444; color: white; } to { background-color: #991b1b; color: #fca5a5; } }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100; justify-content: center; align-items: center; backdrop-filter: blur(2px); }
+        .modal.active { display: flex; animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .big-text-modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:#000; color:#fff; z-index:999; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:20px; }
+        .broadcast-modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(220,38,38,0.95); color:#fff; z-index:9999; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:20px; backdrop-filter: blur(5px); }
+        .highlight-item { background-color: #fef08a !important; border-left: 4px solid #eab308; transition: all 0.3s; }
+        .dimmed-item { opacity: 0.4; text-decoration: line-through; transition: all 0.3s; }
+        body.dark-mode { background-color: #0f172a; color: #f1f5f9; }
+        .dark-mode .bg-white { background-color: #1e293b; color: #f1f5f9; border-color: #334155; }
+        .dark-mode .bg-slate-100 { background-color: #334155; color: #e2e8f0; }
+        .dark-mode .text-slate-700, .dark-mode .text-slate-600, .dark-mode .text-slate-500 { color: #cbd5e1; }
+        .dark-mode .bg-blue-50 { background-color: #1e3a8a; border-color: #1e40af; color: #bfdbfe; }
+        .dark-mode .text-blue-900 { color: #bfdbfe; }
+        .dark-mode header { background-color: #0f172a; border-bottom-color: #334155; }
+        .dark-mode .highlight-item { background-color: #422006 !important; border-left: 4px solid #eab308; color: #fef08a; }
+        #map-view { z-index: 10; }
+        .leaflet-popup-content-wrapper { border-radius: 8px; font-family: 'Pretendard', sans-serif; }
+        .custom-div-icon { background: transparent; border: none; }
+        .party-icon { animation: pulse 1.5s infinite; border: 3px solid #ef4444; border-radius: 50%; background: white; text-align: center; line-height: 28px; font-weight: bold; font-size: 12px; color: #ef4444; }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen pb-20">
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm transition-colors">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row sm:items-center justify-between">
+            <div class="flex items-center justify-between w-full sm:w-auto h-14 sm:h-16">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-rocket text-blue-600 text-2xl"></i>
+                    <h1 class="text-lg font-bold tracking-tight">도쿄 슈퍼앱 <span class="text-xs bg-red-500 text-white px-1 rounded ml-1">SYNC</span></h1>
+                </div>
+                <button onclick="toggleDarkMode()" class="text-slate-500 text-xl sm:hidden"><i class="fas fa-moon"></i></button>
+            </div>
+            <div class="flex items-center w-full sm:w-auto gap-3 justify-between sm:justify-end pb-2 sm:pb-0 sm:h-16">
+                <nav class="flex gap-1 overflow-x-auto hide-scrollbar w-full sm:w-auto items-end pt-1 sm:pt-0 text-sm">
+                    <button onclick="switchTab('tab-itin')" id="nav-itin" class="tab-btn tab-active whitespace-nowrap px-3 py-2 sm:py-3 rounded-t-lg text-blue-600"><i class="fas fa-calendar-alt"></i> 일정</button>
+                    <button onclick="switchTab('tab-db')" id="nav-db" class="tab-btn whitespace-nowrap px-3 py-2 sm:py-3 text-slate-500 rounded-t-lg"><i class="fas fa-map-marker-alt"></i> DB&GPS</button>
+                    <button onclick="switchTab('tab-tools')" id="nav-tools" class="tab-btn whitespace-nowrap px-3 py-2 sm:py-3 text-slate-500 rounded-t-lg"><i class="fas fa-toolbox"></i> 도구함</button>
+                </nav>
+                <button onclick="toggleDarkMode()" class="text-slate-500 text-xl hidden sm:block"><i class="fas fa-moon"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl mx-auto w-full px-4 py-6">
+        
+        <!-- [탭 1] 일정 -->
+        <section id="tab-itin" class="content-section block">
+            <div class="flex gap-1 sm:gap-2 mb-4 bg-slate-100 p-1 rounded-lg w-full max-w-md mx-auto">
+                <button onclick="toggleItin('friends')" id="btn-itin-friends" class="flex-1 py-2 px-1 bg-white shadow rounded font-bold text-blue-600 text-xs sm:text-sm leading-tight tracking-tighter">5월 친구 일정</button>
+                <button onclick="toggleItin('parents')" id="btn-itin-parents" class="flex-1 py-2 px-1 text-slate-500 text-xs sm:text-sm font-bold leading-tight tracking-tighter">4월 부모님 일정</button>
+            </div>
+
+            <!-- 친구 일정 -->
+            <div id="prog-friends" class="mb-6 bg-white p-4 rounded-xl shadow-sm border">
+                <div class="flex justify-between text-xs font-bold text-slate-500 mb-1"><span>전체 퀘스트 달성률 🏃‍♂️</span><span id="prog-friends-txt" class="text-blue-600">0%</span></div>
+                <div class="w-full bg-slate-200 rounded-full h-2.5"><div id="prog-friends-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div></div>
+            </div>
+            <div id="itin-friends" class="space-y-4">
+                <h2 class="text-xl font-bold mb-2">친구 동반 (5/13~5/18)</h2>
+                <div class="bg-white p-4 rounded-xl shadow-sm border day-card">
+                    <h3 class="font-bold text-blue-600 mb-2 border-b pb-1">Day 1 (5/13 수): 가와구치코 입성</h3>
+                    <ul class="text-sm space-y-2">
+                        <li data-time="08:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">08:00</span> 나리타 도착 및 직행 버스 탑승</li>
+                        <li data-time="13:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">13:00</span> 호토 후도 (명물 호박 호토멘 점심)</li>
+                        <li data-time="15:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">15:00</span> 오이시 공원 산책 및 레이크 베이크 빵집</li>
+                        <li data-time="19:00"><span class="font-bold w-12 inline-block text-blue-600">19:00</span> 야키니쿠 테츠진 (가성비 와규 야키니쿠)</li>
+                    </ul>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border day-card">
+                    <h3 class="font-bold text-blue-600 mb-2 border-b pb-1">Day 2 (5/14 목): 엽서 뷰 감상 및 복귀</h3>
+                    <ul class="text-sm space-y-2">
+                        <li data-time="08:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">08:30</span> 아라쿠라야마 센겐 공원 (츄레이토 탑)</li>
+                        <li data-time="10:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">10:30</span> 미우라 우동 (극강 쫄깃함 요시다 우동)</li>
+                        <li data-time="13:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">13:00</span> 도쿄 도심(신주쿠/시부야) 복귀 및 체크인</li>
+                        <li data-time="18:30"><span class="font-bold w-12 inline-block text-blue-600">18:30</span> 오케이 (Okei, 빕구르망 교자)</li>
+                    </ul>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border day-card">
+                    <h3 class="font-bold text-blue-600 mb-2 border-b pb-1">Day 3 (5/15 금): 로컬 힙투어</h3>
+                    <ul class="text-sm space-y-2">
+                        <li data-time="08:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">08:00</span> 가츠오 쇼쿠도 (하츠가츠오 대패 덮밥)</li>
+                        <li data-time="10:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">10:30</span> 빅카메라 이케부쿠로 (T9 SSD / 위스키)</li>
+                        <li data-time="13:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">13:30</span> 나카메구로 다이와 (생과일 샌드위치)</li>
+                        <li data-time="18:30"><span class="font-bold w-12 inline-block text-blue-600">18:30</span> 와라야키야 (Warayakiya, 볏짚 구이 이자카야)</li>
+                    </ul>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border day-card">
+                    <h3 class="font-bold text-blue-600 mb-2 border-b pb-1">Day 4 (5/16 토): 쇼핑 데이</h3>
+                    <ul class="text-sm space-y-2">
+                        <li data-time="09:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">09:00</span> 푸글렌 도쿄 (요요기 북유럽 감성 카페)</li>
+                        <li data-time="12:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">12:30</span> 야마다노 우나기 (도매 직영 장어덮밥)</li>
+                        <li data-time="15:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">15:00</span> 요도바시 아키바 (포터 가방 / 모멘텀 4)</li>
+                        <li data-time="18:30"><span class="font-bold w-12 inline-block text-blue-600">18:30</span> 마루고 (Marugo, 전설의 특로스카츠)</li>
+                    </ul>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border day-card">
+                    <h3 class="font-bold text-blue-600 mb-2 border-b pb-1">Day 5~6 (5/17~18): 귀국</h3>
+                    <ul class="text-sm space-y-2">
+                        <li data-time="10:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">Day 5</span> 글리치 커피 / 카페 드 람브르</li>
+                        <li data-time="14:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">Day 5</span> 군린도 (Gunrindo, 화과자)</li>
+                        <li data-time="19:00"><span class="font-bold w-12 inline-block text-blue-600">Day 5</span> 몬젠나카초 이자카야 골목 털기</li>
+                        <li data-time="09:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">Day 6</span> 소금빵 메종 픽업 후 나리타 출국</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 부모님 일정 -->
+            <div id="prog-parents" class="mb-6 bg-white p-4 rounded-xl shadow-sm border hidden">
+                <div class="flex justify-between text-xs font-bold text-slate-500 mb-1"><span>전체 퀘스트 달성률 🏃‍♂️</span><span id="prog-parents-txt" class="text-blue-600">0%</span></div>
+                <div class="w-full bg-slate-200 rounded-full h-2.5"><div id="prog-parents-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div></div>
+            </div>
+            <div id="itin-parents" class="space-y-4 hidden">
+                <h2 class="text-xl font-bold mb-2">부모님 동반 (4/12~4/16)</h2>
+                <div class="bg-white p-4 rounded-xl shadow-sm border day-card">
+                    <h3 class="font-bold text-blue-600 mb-2 border-b pb-1">Day 1 (4/12 일): 긴자 입성</h3>
+                    <ul class="text-sm space-y-2">
+                        <li data-time="14:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">14:00</span> 나리타 공항 도착 및 도쿄역 이동</li>
+                        <li data-time="16:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">16:30</span> 긴자 미츠코시 백화점 산책</li>
+                        <li data-time="18:30"><span class="font-bold w-12 inline-block text-blue-600">18:30</span> 닝교초 이마한 긴자점 (흑우 스키야키)</li>
+                        <li data-time="20:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">20:30</span> 긴자 주말 차 없는 거리 산책</li>
+                    </ul>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border day-card">
+                    <h3 class="font-bold text-blue-600 mb-2 border-b pb-1">Day 2 (4/13 월): 에도 정취와 야경</h3>
+                    <ul class="text-sm space-y-2">
+                        <li data-time="09:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">09:30</span> 아사쿠사 센소지 방문 및 인력거 탑승</li>
+                        <li data-time="12:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">12:30</span> 히츠마부시 빈초 (장어덮밥)</li>
+                        <li data-time="15:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">15:00</span> 네즈 미술관 (정원 산책)</li>
+                        <li data-time="18:30"><span class="font-bold w-12 inline-block text-blue-600">18:30</span> d47 쇼쿠도 (시부야 야경 정식)</li>
+                        <li data-time="20:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">20:00</span> 시부야 스카이 전망대 방문</li>
+                    </ul>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border day-card">
+                    <h3 class="font-bold text-blue-600 mb-2 border-b pb-1">Day 3 (4/14 화): 하이엔드 미식</h3>
+                    <ul class="text-sm space-y-2">
+                        <li data-time="10:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">10:00</span> 신주쿠 교엔 산책</li>
+                        <li data-time="12:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">12:30</span> 이세탄 백화점 프리미엄 피크닉</li>
+                        <li data-time="14:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">14:30</span> 긴자 이토야 본점 (문구 쇼핑)</li>
+                        <li data-time="18:30"><span class="font-bold w-12 inline-block text-blue-600">18:30</span> 스시 고바야시 (하이엔드 오마카세)</li>
+                    </ul>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border day-card">
+                    <h3 class="font-bold text-blue-600 mb-2 border-b pb-1">Day 4~5 (4/15~16): 랜드마크</h3>
+                    <ul class="text-sm space-y-2">
+                        <li data-time="10:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">Day 4</span> 도쿄역 적벽돌 역사 및 KITTE</li>
+                        <li data-time="12:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">Day 4</span> 돈카츠 아오키 (프리미엄 돈카츠)</li>
+                        <li data-time="15:30"><span class="font-bold w-12 inline-block text-blue-600">Day 4</span> 센비키야 (최상급 멜론 파르페)</li>
+                        <li data-time="18:30"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">Day 4</span> 롯폰기 힐즈 모리 타워 야경</li>
+                        <li data-time="09:00"><span class="font-bold w-12 inline-block text-slate-800 dark:text-slate-200">Day 5</span> 호텔 조식 후 나리타 공항 이동</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- [탭 2] DB & GPS -->
+        <section id="tab-db" class="content-section hidden">
+            <div class="mb-4 bg-blue-50 border border-blue-200 p-4 rounded-xl flex flex-col gap-3">
+                <div class="flex justify-between items-center">
+                    <h2 class="font-bold text-blue-900"><i class="fas fa-satellite-dish"></i> 실시간 상태 & GPS</h2>
+                    <button onclick="togglePartyMode()" id="btn-party" class="bg-pink-500 text-white px-3 py-1 rounded-lg text-xs font-bold shadow animate-pulse"><i class="fas fa-users"></i> 파티 레이더</button>
+                    <button onclick="toggleGPS()" id="btn-gps" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow"><i class="fas fa-location-crosshairs"></i> GPS 켜기</button>
+                </div>
+               
+                <div id="hashtag-container" class="flex gap-2 overflow-x-auto hide-scrollbar pb-1"></div>
+
+                <div class="flex flex-wrap sm:flex-nowrap gap-2 mt-1">
+                    <select id="db-cat" onchange="renderDB()" class="border rounded p-2 text-sm w-full sm:w-1/3 bg-white text-black h-10 shadow-sm">
+                        <option value="all">모든 분류</option>
+                        <option value="식당">식당</option>
+                        <option value="디저트">디저트</option>
+                        <option value="관광">관광</option>
+                        <option value="쇼핑">쇼핑</option>
+                        <option value="near">📍 내 주변 1km</option>
+                    </select>
+                    <div class="relative flex-1">
+                        <input type="text" id="db-search" placeholder="이름, 지역 검색..." class="w-full border rounded px-3 pr-8 text-sm bg-white text-black h-10 shadow-sm">
+                        <button onclick="document.getElementById('db-search').value='';renderDB()" class="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600"><i class="fas fa-times-circle"></i></button>
+                    </div>
+                </div>
+               
+                <div class="flex gap-2">
+                    <label class="flex-1 flex items-center justify-center gap-1 bg-white border rounded h-10 text-sm font-bold cursor-pointer hover:bg-slate-50 shadow-sm select-none">
+                        <input type="checkbox" id="db-fav" onchange="renderDB()" class="w-4 h-4 text-red-500 accent-red-500"> ❤️ 찜
+                    </label>
+                    <label class="flex-1 flex items-center justify-center gap-1 bg-white border rounded h-10 text-sm font-bold cursor-pointer hover:bg-slate-50 shadow-sm select-none">
+                        <input type="checkbox" id="db-open" onchange="renderDB()" class="w-4 h-4 text-green-500 accent-green-500"> 🟢 영업중
+                    </label>
+                </div>
+
+                <div class="flex gap-2 mt-1">
+                    <button onclick="triggerGlobalRoulette()" class="flex-1 bg-indigo-500 text-white py-2 rounded text-sm font-bold shadow-sm"><i class="fas fa-dice"></i> 싱크 룰렛</button>
+                    <button onclick="openRouter()" class="flex-1 bg-emerald-500 text-white py-2 rounded text-sm font-bold shadow-sm"><i class="fas fa-route"></i> 다중 경로 안내</button>
+                    <button onclick="toggleMapView()" id="btn-map" class="flex-1 bg-amber-500 text-white py-2 rounded text-sm font-bold shadow-sm"><i class="fas fa-map"></i> 지도 보기</button>
+                </div>
+            </div>
+           
+            <div id="map-view" class="hidden w-full h-[60vh] rounded-lg shadow-sm border relative"></div>
+
+            <div id="table-container" class="overflow-x-auto bg-white rounded-lg shadow-sm border max-h-[60vh]">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-100 sticky top-0 shadow-sm z-10">
+                        <tr>
+                            <th class="px-2 py-2 text-center w-8 text-xs">경로</th>
+                            <th class="px-2 py-2 text-center w-8">찜</th>
+                            <th class="px-3 py-2 min-w-[240px]">장소명 및 <span class="text-blue-600 font-bold">영업상태</span></th>
+                            <th id="th-dist" class="px-3 py-2 text-red-500 hidden whitespace-nowrap">거리</th>
+                            <th class="px-3 py-2 min-w-[200px]">설명 및 예산</th>
+                        </tr>
+                    </thead>
+                    <tbody id="db-body" class="divide-y border-t"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- [탭 3] 도구함 -->
+        <section id="tab-tools" class="content-section hidden">
+            <h2 class="text-xl font-bold mb-4">🧰 동기화 슈퍼 도구함</h2>
+            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 text-black">
+                <!-- 추가된 동기화 기능 버튼들 -->
+                <button onclick="openModal('advSettlerModal')" class="bg-indigo-50 p-3 rounded-xl shadow-sm border border-indigo-200 flex flex-col items-center gap-2 hover:bg-indigo-100"><i class="fas fa-file-invoice-dollar text-2xl text-indigo-600"></i><span class="text-xs font-bold text-center text-indigo-800">공용 총무장부</span></button>
+                <button onclick="openModal('cartModal')" class="bg-emerald-50 p-3 rounded-xl shadow-sm border border-emerald-200 flex flex-col items-center gap-2 hover:bg-emerald-100"><i class="fas fa-shopping-cart text-2xl text-emerald-600"></i><span class="text-xs font-bold text-center text-emerald-800">공동 장바구니</span></button>
+                <button onclick="openModal('rankingModal')" class="bg-amber-50 p-3 rounded-xl shadow-sm border border-amber-200 flex flex-col items-center gap-2 hover:bg-amber-100"><i class="fas fa-trophy text-2xl text-amber-600"></i><span class="text-xs font-bold text-center text-amber-800">실시간 랭킹</span></button>
+                <button onclick="sendBroadcast()" class="bg-red-50 p-3 rounded-xl shadow-sm border border-red-200 flex flex-col items-center gap-2 hover:bg-red-100"><i class="fas fa-bullhorn text-2xl text-red-600"></i><span class="text-xs font-bold text-center text-red-800">전체 팝업공지</span></button>
+                
+                <button onclick="openModal('bombModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-bomb text-2xl text-slate-700"></i><span class="text-xs font-bold text-center">결제 폭탄돌리기</span></button>
+                <button onclick="openModal('metroModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-map-signs text-2xl text-blue-600"></i><span class="text-xs font-bold text-center">도쿄 노선도</span></button>
+                <button onclick="openModal('calcModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-calculator text-2xl text-emerald-500"></i><span class="text-xs font-bold text-center">환율계산 Pro</span></button>
+                <button onclick="openModal('npayModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-users text-2xl text-blue-500"></i><span class="text-xs font-bold text-center">N빵 정산/공유</span></button>
+                <button onclick="openModal('expModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-chart-pie text-2xl text-purple-500"></i><span class="text-xs font-bold text-center">개인 가계부</span></button>
+                <button onclick="openModal('suicaModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-train text-2xl text-green-500"></i><span class="text-xs font-bold text-center">스이카/파스모</span></button>
+                <button onclick="openModal('taxModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-receipt text-2xl text-yellow-500"></i><span class="text-xs font-bold text-center">면세 게이지</span></button>
+                <button onclick="openModal('memoModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-lock text-2xl text-slate-700"></i><span class="text-xs font-bold text-center">바우처/드럭</span></button>
+                <button onclick="openModal('omiModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-om text-2xl text-red-600"></i><span class="text-xs font-bold text-center">오늘의 운세</span></button>
+                <button onclick="openModal('ttsModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-volume-up text-2xl text-orange-500"></i><span class="text-xs font-bold text-center">생존일본어</span></button>
+                <button onclick="openModal('allergyModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-red-50"><i class="fas fa-exclamation-triangle text-2xl text-red-600"></i><span class="text-xs font-bold text-red-600 text-center">알레르기 카드</span></button>
+                <button onclick="openModal('wikiModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-book-open text-2xl text-sky-500"></i><span class="text-xs font-bold text-center">선술집/한자</span></button>
+                <button onclick="openModal('weatherModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-tshirt text-2xl text-cyan-500"></i><span class="text-xs font-bold text-center">옷차림픽커</span></button>
+                <button onclick="openModal('sunModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-sun text-2xl text-amber-500"></i><span class="text-xs font-bold text-center">전국 일몰</span></button>
+                <button onclick="openModal('trainModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-subway text-2xl text-indigo-400"></i><span class="text-xs font-bold text-center">막차 타이머</span></button>
+                <button onclick="openModal('bingoModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-th text-2xl text-pink-500"></i><span class="text-xs font-bold text-center">편의점빙고</span></button>
+                <button onclick="openModal('sosModal')" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-red-50"><i class="fas fa-taxi text-2xl text-red-600"></i><span class="text-xs font-bold text-center">비상 귀가/SOS</span></button>
+                <button onclick="findRestroom()" class="bg-white p-3 rounded-xl shadow-sm border flex flex-col items-center gap-2 hover:bg-slate-50"><i class="fas fa-restroom text-2xl text-teal-500"></i><span class="text-xs font-bold text-center">주변 화장실</span></button>
+            </div>
+           
+            <div class="mt-6 bg-slate-800 text-white p-4 rounded-xl text-xs">
+                <p class="font-bold text-sky-400 mb-1"><i class="fas fa-info-circle"></i> 커스텀 쇼핑 메모</p>
+                <ul class="list-disc pl-4 opacity-90">
+                    <li>면세(Tax Free) 혜택이 없으므로 돈키호테 줄 서지 마세요.</li>
+                    <li>삼성 T9 1TB SSD는 빅카메라에서 32,210엔에 구매 가능.</li>
+                    <li>Sennheiser Momentum True Wireless 4 및 Porter 가방은 요도바시 아키바 공략!</li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <!-- 모달(팝업) 영역 모음 -->
+    <div id="bombModal" class="modal">
+        <div class="bg-white text-black p-6 rounded-xl w-11/12 max-w-sm text-center" id="bombContainer">
+            <h3 class="font-black mb-2 text-2xl text-red-600"><i class="fas fa-bomb"></i> 결제 독박 룰렛</h3>
+            <p class="text-xs text-slate-500 mb-4">이번 편의점 간식, 누가 쏠까? 이름을 쉼표(,)로 입력하세요.</p>
+            <input type="text" id="bombNames" value="나, 친구1, 친구2, 친구3" class="w-full border-2 border-red-200 p-3 mb-4 rounded-lg text-center font-bold text-lg focus:outline-none focus:border-red-500">
+            <div id="bombResult" class="text-6xl font-black text-slate-800 mb-6 h-20 flex items-center justify-center">❓</div>
+            <button onclick="startBombGame()" class="w-full bg-red-600 text-white py-4 rounded-xl font-black text-xl mb-2 shadow-lg shadow-red-200 hover:bg-red-700 transition">폭탄 돌리기 시작!</button>
+            <button onclick="closeModal('bombModal')" class="mt-2 w-full bg-slate-200 py-3 rounded-lg font-bold">닫기</button>
+        </div>
+    </div>
+
+    <!-- 1. 공용 장바구니 모달 -->
+    <div id="cartModal" class="modal">
+        <div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm">
+            <h3 class="font-bold mb-3 text-lg text-emerald-600"><i class="fas fa-shopping-cart"></i> 실시간 공동 장바구니</h3>
+            <div class="flex gap-1 mb-3">
+                <input type="text" id="cItem" placeholder="구매할 물품 입력" class="border p-2 flex-1 rounded text-sm focus:outline-emerald-500">
+                <button onclick="addCartItem()" class="bg-emerald-500 text-white px-4 rounded font-bold">추가</button>
+            </div>
+            <ul id="cartList" class="text-sm h-48 overflow-y-auto bg-slate-50 p-2 rounded border space-y-1"></ul>
+            <button onclick="closeModal('cartModal')" class="mt-3 w-full bg-slate-200 py-2 rounded font-bold">닫기</button>
+        </div>
+    </div>
+
+    <!-- 4. 실시간 랭킹 모달 -->
+    <div id="rankingModal" class="modal">
+        <div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm">
+            <h3 class="font-bold mb-3 text-lg text-amber-600"><i class="fas fa-trophy"></i> 실시간 맛집 투표 랭킹</h3>
+            <p class="text-xs text-slate-500 mb-3">일행들이 가장 많이 투표(👍)한 장소입니다.</p>
+            <ol id="rankingList" class="text-sm h-48 overflow-y-auto bg-slate-50 p-2 rounded border space-y-2 list-decimal list-inside pl-2"></ol>
+            <button onclick="closeModal('rankingModal')" class="mt-3 w-full bg-slate-200 py-2 rounded font-bold">닫기</button>
+        </div>
+    </div>
+
+    <!-- 5. 강제 공지 팝업 모달 -->
+    <div id="broadcastModal" class="broadcast-modal">
+        <i class="fas fa-exclamation-triangle text-6xl mb-4 text-yellow-300"></i>
+        <h2 class="text-2xl font-black mb-4">긴급 전체 공지</h2>
+        <p id="broadcastMsg" class="text-lg font-bold bg-black bg-opacity-50 p-4 rounded-xl w-full max-w-sm whitespace-pre-line"></p>
+        <button onclick="document.getElementById('broadcastModal').style.display='none'" class="mt-8 border-2 border-white px-8 py-3 rounded-full font-bold text-lg hover:bg-white hover:text-red-600 transition">확인했습니다</button>
+    </div>
+   
+    <!-- (나머지 모달들) -->
+    <div id="metroModal" class="modal"><div class="bg-slate-900 text-white p-2 rounded-xl w-11/12 max-w-lg h-[80vh] flex flex-col"><div class="flex justify-between items-center p-2 border-b border-slate-700 mb-2"><h3 class="font-bold text-lg"><i class="fas fa-subway text-blue-400"></i> 오프라인 지하철 노선도</h3><button onclick="closeModal('metroModal')" class="text-slate-400 text-2xl px-2">×</button></div><div class="flex-grow overflow-auto bg-white rounded flex items-start justify-start relative p-1"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Tokyo_Subway_Route_Map_%28ko%29.png/1024px-Tokyo_Subway_Route_Map_%28ko%29.png" alt="도쿄 노선도" class="min-w-[800px] w-full object-contain"></div><a href="https://www.tokyometro.jp/station/pdf/202303/network_kr.pdf" target="_blank" class="w-full bg-blue-600 text-white py-2 rounded font-bold mt-2 text-center block">공식 고해상도 PDF 보기</a></div></div>
+    <div id="expModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm"><h3 class="font-bold mb-3 text-lg">💰 개인 가계부</h3><input type="number" id="eAmt" placeholder="엔화 금액" class="w-full border-2 p-2 mb-1 rounded text-sm focus:outline-blue-500"><input type="text" id="eDesc" placeholder="지출 내역 (예: 돈키호테)" class="w-full border-2 p-2 mb-2 rounded text-sm focus:outline-blue-500"><button onclick="addExp()" class="w-full bg-purple-500 text-white py-2 rounded font-bold mb-2 text-sm shadow">내역 추가</button><p class="text-sm font-bold text-right mb-1 border-b pb-1">현재 총 지출: <span id="eTotal" class="text-purple-600 text-lg">0</span> 엔</p><ul id="eList" class="text-xs h-32 overflow-y-auto bg-slate-50 p-2 rounded space-y-1"></ul><button onclick="closeModal('expModal')" class="mt-3 w-full bg-slate-200 py-2 rounded font-bold">닫기</button></div></div>
+    <div id="weatherModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm"><h3 class="font-bold mb-2 text-lg">⛅ 도쿄 3일 날씨 & 옷차림</h3><div id="weather-content" class="text-sm space-y-2 mt-2"><div class="text-center py-4"><i class="fas fa-spinner fa-spin text-2xl text-slate-400"></i></div></div><button onclick="closeModal('weatherModal')" class="mt-4 w-full bg-slate-200 py-2 rounded font-bold">닫기</button></div></div>
+    <div id="calcModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm"><div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">🧮 듀얼 환율 Pro</h3><button onclick="fetchRates()" class="text-blue-500 text-sm font-bold bg-blue-50 px-2 py-1 rounded"><i class="fas fa-sync-alt"></i> 실시간 갱신</button></div><div class="flex gap-2 mb-2 text-xs text-slate-500 items-center bg-slate-50 p-2 rounded"><label class="flex-1 font-bold">100엔 = <input type="number" id="rateKrw" class="w-14 border rounded px-1 text-center font-bold text-red-600" value="900" onchange="updateRates()">원</label><label class="flex-1 font-bold text-right">100엔 = <input type="number" id="rateThb" class="w-12 border rounded px-1 text-center font-bold text-blue-600" value="22.5" onchange="updateRates()">바트</label></div><input type="number" id="calcIn" placeholder="엔화(¥) 금액 입력" class="w-full border-2 border-slate-300 p-3 mb-3 rounded-lg text-lg font-bold text-center" onkeyup="doCalc()"><p class="text-sm bg-blue-50 border border-blue-100 p-3 rounded flex justify-between items-center mb-2"><span class="font-bold text-slate-600">🇹🇭 THB (약)</span> <span id="cThb" class="font-bold text-blue-600 text-xl">0</span></p><p class="text-sm bg-red-50 border border-red-100 p-3 rounded flex justify-between items-center"><span class="font-bold text-slate-600">🇰🇷 KRW (약)</span> <span id="cKrw" class="font-bold text-red-600 text-xl">0</span></p><button onclick="closeModal('calcModal')" class="mt-4 w-full bg-slate-200 py-2 rounded font-bold hover:bg-slate-300">닫기</button></div></div>
+    <div id="npayModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm"><h3 class="font-bold mb-3 text-lg">👯‍♂️ N빵 정산기</h3><input type="number" id="nAmt" placeholder="총 금액 (엔화)" class="w-full border p-2 mb-2 rounded"><input type="number" id="nPpl" placeholder="몇 명?" class="w-full border p-2 mb-2 rounded"><button onclick="doNpay()" class="w-full bg-blue-500 text-white py-2 rounded font-bold mb-2">계산하기</button><p id="nRes" class="text-sm bg-blue-50 p-3 rounded font-bold text-center whitespace-pre-line mb-2 text-slate-700"></p><button onclick="shareNpay()" class="w-full bg-yellow-400 text-yellow-900 py-2 rounded font-bold mb-2"><i class="fas fa-share-alt"></i> 결과 복사 (카톡 공유용)</button><button onclick="closeModal('npayModal')" class="w-full bg-slate-200 py-2 rounded font-bold">닫기</button></div></div>
+    
+    <!-- 1. 총무 장부 모달 수정 (Firebase 연동) -->
+    <div id="advSettlerModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm"><h3 class="font-bold mb-3 text-lg text-indigo-600"><i class="fas fa-cloud"></i> 실시간 공용 총무장부</h3><p class="text-[10px] text-slate-500 mb-2">누가 입력하든 일행 전원의 폰에 실시간으로 반영됩니다.</p><div class="flex gap-1 mb-2"><input type="text" id="sName" placeholder="결제자 이름" class="border p-2 w-1/3 rounded"><input type="number" id="sAmt" placeholder="결제 금액 (엔화)" class="border p-2 w-2/3 rounded"></div><button onclick="addSett()" class="w-full bg-indigo-500 text-white py-2 rounded font-bold mb-2 shadow">서버에 기록 추가</button><ul id="sList" class="text-xs max-h-32 overflow-y-auto bg-slate-50 p-2 rounded mb-2 border"></ul><button onclick="calcSett()" class="w-full bg-emerald-500 text-white py-2 rounded font-bold mb-2 shadow">실시간 N빵 정산결과 보기</button><p id="sRes" class="text-xs text-red-600 font-bold whitespace-pre-line"></p><button onclick="closeModal('advSettlerModal')" class="mt-2 w-full bg-slate-200 py-2 rounded font-bold">닫기</button></div></div>
+    
+    <div id="suicaModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm"><h3 class="font-bold mb-3 text-lg text-green-600"><i class="fas fa-train"></i> 스이카 수동 추적기</h3><div class="flex gap-2 mb-2"><input type="number" id="sBalInput" placeholder="충전 잔액 입력" class="border p-2 w-full rounded"><button onclick="setSuica()" class="bg-green-500 text-white px-3 rounded font-bold">설정</button></div><div class="text-center bg-slate-100 p-4 rounded-lg mb-3 text-2xl font-bold text-green-700" id="sBalDisplay">¥ 0</div><div class="grid grid-cols-4 gap-2 mb-2"><button onclick="addSuica(-150)" class="bg-red-100 text-red-700 p-2 rounded text-xs font-bold">-150(음료)</button><button onclick="addSuica(-180)" class="bg-blue-100 text-blue-700 p-2 rounded text-xs font-bold">-180(지하철)</button><button onclick="addSuica(-250)" class="bg-blue-100 text-blue-700 p-2 rounded text-xs font-bold">-250(환승)</button><button onclick="addSuica(-500)" class="bg-yellow-100 text-yellow-700 p-2 rounded text-xs font-bold">-500(편의점)</button></div><button onclick="closeModal('suicaModal')" class="mt-2 w-full bg-slate-200 py-2 rounded font-bold">닫기</button></div></div>
+    <div id="taxModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm"><h3 class="font-bold mb-3 text-lg text-yellow-600"><i class="fas fa-receipt"></i> 면세(Tax-Free) 게이지</h3><p class="text-[10px] mb-2 text-slate-500">세금 포함(税込) 가격 합산 (목표: 약 5,500엔)</p><input type="number" id="taxIn" placeholder="장바구니 총액 (엔화)" class="w-full border p-2 mb-2 rounded font-bold text-lg text-center" onkeyup="checkTax()"><div class="w-full bg-slate-200 rounded-full h-4 mb-2 overflow-hidden"><div id="taxBar" class="bg-yellow-400 h-4 transition-all duration-300" style="width: 0%"></div></div><div id="taxRes" class="p-3 rounded text-sm font-bold text-center bg-slate-100 mt-2">금액을 입력하세요</div><button onclick="closeModal('taxModal')" class="mt-3 w-full bg-slate-200 py-2 rounded font-bold">닫기</button></div></div>
+    <div id="memoModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm"><h3 class="font-bold mb-3 text-lg"><i class="fas fa-lock"></i> 오프라인 메모장</h3><textarea id="memo1" class="w-full border p-2 rounded text-sm h-20 mb-2" placeholder="예약번호: 12345" onkeyup="saveMemo()"></textarea><textarea id="memo2" class="w-full border p-2 rounded text-sm h-20" placeholder="카베진: 돈키 1500엔 / 마츠키요 1400엔" onkeyup="saveMemo()"></textarea><button onclick="closeModal('memoModal')" class="mt-3 w-full bg-slate-200 py-2 rounded font-bold">닫기</button></div></div>
+    <div id="wikiModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm h-[80vh] overflow-y-auto"><h3 class="font-bold mb-3 text-lg text-sky-600"><i class="fas fa-book-open"></i> 선술집 & 한자 치트</h3><div class="space-y-3 text-sm"><div class="bg-blue-50 p-3 rounded"><p><b>오토시(お通し):</b> 자릿세 개념 기본 안주.</p><p><b>노미호다이:</b> 술 무제한. 글라스 교환제.</p><p><b>주문:</b> 토리아에즈 나마 후타츠!(일단 생맥 2잔!)</p></div><div class="bg-rose-50 p-3 rounded"><p><b>고기:</b> 牛(소), 豚(돼지), 鶏(닭)</p><p><b>해물:</b> 魚(생선), 鮪(참치), 海老(새우)</p><p><b>기타:</b> 焼(구이), 揚(튀김), 生(생), お会計(계산)</p></div></div><button onclick="closeModal('wikiModal')" class="mt-4 w-full bg-slate-200 py-2 rounded font-bold">닫기</button></div></div>
+    <div id="omiModal" class="modal"><div class="bg-white text-black p-6 rounded-xl w-11/12 max-w-sm text-center"><h3 class="font-bold mb-4 text-xl text-red-600">⛩️ 오늘의 운세 뽑기</h3><div id="omiRes" class="text-6xl mb-4 py-4 border-2 border-red-600 text-red-600 rounded font-bold bg-red-50">?</div><p id="omiText" class="text-sm font-bold text-slate-700 mb-4 h-10">마음을 가다듬고 버튼을 누르세요.</p><button onclick="drawOmi()" class="w-full bg-red-600 text-white py-3 rounded-lg font-bold text-lg mb-2">운세 뽑기!</button><button onclick="closeModal('omiModal')" class="w-full bg-slate-200 py-2 rounded font-bold">닫기</button></div></div>
+    <div id="ttsModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm"><h3 class="font-bold mb-3 text-lg">🗣️ 생존 일본어</h3><div class="bg-slate-800 text-white p-4 rounded-lg mb-3 min-h-[100px] flex flex-col justify-center text-center"><p id="tts-ko" class="text-xs text-sky-300 mb-1">버튼을 눌러보세요</p><p id="tts-ja" class="text-xl font-bold mb-1">-</p><p id="tts-pron" class="text-sm text-amber-300">-</p></div><div class="grid grid-cols-2 gap-2"><button onclick="playTTS('계산해 주세요', 'お会計お願いします', '오카이케이 오네가이시마스')" class="bg-orange-100 text-orange-800 p-2 rounded font-bold text-xs">계산 요청 💸</button><button onclick="playTTS('이거랑 똑같은 거 주세요', 'これと同じものください', '코레토 오나지 모노 쿠다사이')" class="bg-orange-100 text-orange-800 p-2 rounded font-bold text-xs">똑같은 거 추가 ☝️</button><button onclick="playTTS('영어 메뉴 있나요?', '英語のメニューありますか？', '에이고노 메뉴 아리마스카?')" class="bg-orange-100 text-orange-800 p-2 rounded font-bold text-xs">영어 메뉴 📖</button><button onclick="playTTS('사진 찍어주시겠어요?', '写真撮ってもらえますか？', '샤신 톳테 모라에마스카?')" class="bg-orange-100 text-orange-800 p-2 rounded font-bold text-xs">사진 촬영 📸</button><button onclick="playTTS('따로따로 계산할게요', '別々でお会計お願いします', '베츠베츠데 오카이케이 오네가이시마스')" class="bg-orange-100 text-orange-800 p-2 rounded font-bold text-xs">따로 계산 ➗</button><button onclick="playTTS('추천 메뉴가 뭐예요?', 'おすすめは何ですか？', '오스스메와 난데스카?')" class="bg-orange-100 text-orange-800 p-2 rounded font-bold text-xs">추천 메뉴 👍</button><button onclick="playTTS('화장실은 어디인가요?', 'トイレはどこですか？', '토이레와 도코데스카?')" class="bg-orange-100 text-orange-800 p-2 rounded font-bold text-xs">화장실 위치 🚻</button><button onclick="playTTS('영수증 주세요', 'レシートください', '레시-토 쿠다사이')" class="bg-orange-100 text-orange-800 p-2 rounded font-bold text-xs">영수증 🧾</button></div><button onclick="closeModal('ttsModal')" class="mt-3 w-full bg-slate-200 py-2 rounded font-bold">닫기</button></div></div>
+    <div id="sosModal" class="modal"><div class="bg-red-600 p-6 rounded-xl w-11/12 max-w-sm text-white text-center"><h3 class="font-bold mb-2 text-xl"><i class="fas fa-taxi"></i> SOS 귀가 카드</h3><p class="text-sm mb-4">택시 기사님께 보여주세요!</p><div class="bg-white text-black p-4 rounded-lg mb-4"><textarea id="sosHotelIn" class="w-full text-center bg-transparent font-bold text-xl outline-none resize-none" placeholder="호텔 주소 입력" onkeyup="saveSOS()"></textarea></div><p class="text-xs">경찰: 110 / 구급차: 119</p><button onclick="sendSOS()" class="w-full bg-white text-red-600 py-3 rounded-lg font-bold mb-3 shadow"><i class="fas fa-map-pin"></i> 현재 내 위치 전송</button><button onclick="closeModal('sosModal')" class="mt-2 w-full bg-red-800 py-2 rounded font-bold">닫기</button></div></div>
+    <div id="bingoModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm"><h3 class="font-bold mb-3 text-lg text-pink-600">🎰 매일 밤 편의점 빙고!</h3><div id="bingoGrid" class="grid grid-cols-4 gap-1 text-xs text-center font-bold"></div><button onclick="resetBingo()" class="text-xs text-slate-400 underline mt-2">초기화</button><button onclick="closeModal('bingoModal')" class="mt-2 w-full bg-slate-200 py-2 rounded font-bold">닫기</button></div></div>
+    <div id="allergyModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm relative overflow-hidden"><h3 class="font-bold mb-3 text-lg text-red-600"><i class="fas fa-exclamation-triangle"></i> 알레르기/기피 설정</h3><div class="grid grid-cols-3 gap-2 mb-4 text-sm" id="alg-options"><label class="flex items-center gap-1 bg-slate-50 p-2 rounded border"><input type="checkbox" value="오이(きゅうり)"> 오이</label><label class="flex items-center gap-1 bg-slate-50 p-2 rounded border"><input type="checkbox" value="갑각류(甲殻類)"> 갑각류</label><label class="flex items-center gap-1 bg-slate-50 p-2 rounded border"><input type="checkbox" value="땅콩(ピーナッツ)"> 땅콩</label><label class="flex items-center gap-1 bg-slate-50 p-2 rounded border"><input type="checkbox" value="돼지고기(豚肉)"> 돼지고기</label><label class="flex items-center gap-1 bg-slate-50 p-2 rounded border"><input type="checkbox" value="우유(牛乳)"> 우유</label><label class="flex items-center gap-1 bg-slate-50 p-2 rounded border"><input type="checkbox" value="계란(卵)"> 계란</label><label class="flex items-center gap-1 bg-slate-50 p-2 rounded border"><input type="checkbox" value="고수(パクチー)"> 고수</label><label class="flex items-center gap-1 bg-slate-50 p-2 rounded border"><input type="checkbox" value="파(ネギ)"> 파</label><label class="flex items-center gap-1 bg-slate-50 p-2 rounded border"><input type="checkbox" value="복숭아(桃)"> 복숭아</label></div><button onclick="showAllergyCard()" class="w-full bg-red-600 text-white py-3 rounded font-bold text-lg shadow-lg mb-2">종업원에게 보여주기</button><button onclick="closeModal('allergyModal')" class="w-full bg-slate-200 py-2 rounded font-bold">닫기</button><div id="alg-fullcard" class="absolute top-0 left-0 w-full h-full bg-red-600 text-white flex flex-col justify-center items-center p-6 transform translate-y-full transition-transform duration-300"><i class="fas fa-hand-paper text-5xl mb-4"></i><h2 class="text-2xl font-bold mb-2">アレルギーがあります</h2><p class="text-sm mb-6 text-center opacity-90">(알레르기가/못 먹는 음식이 있습니다. 절대 넣지 말아주세요.)</p><div id="alg-list-display" class="bg-white text-red-600 font-bold text-2xl p-4 rounded-lg mb-8 text-center w-full min-h-[100px] flex items-center justify-center flex-wrap gap-2"></div><button onclick="hideAllergyCard()" class="border-2 border-white px-6 py-2 rounded-full font-bold">돌아가기</button></div></div></div>
+    <div id="sunModal" class="modal"><div class="bg-slate-900 p-5 rounded-xl w-11/12 max-w-sm text-white text-center"><h3 class="font-bold mb-3 text-lg text-amber-400">🌅 전국 일몰 타임어택</h3><select id="sun-city" onchange="fetchSunset()" class="w-full bg-slate-800 border border-slate-700 text-white p-2 rounded mb-4 text-center font-bold"><option value="35.6895,139.6917">도쿄 (Tokyo)</option><option value="35.5020,138.7705" selected>가와구치코 (Fuji)</option><option value="34.6937,135.5023">오사카 (Osaka)</option><option value="43.0618,141.3545">삿포로 (Sapporo)</option><option value="33.5902,130.4017">후쿠오카 (Fukuoka)</option></select><p class="text-xs text-slate-400 mb-1">오늘의 예상 일몰 시간</p><p id="sun-time-txt" class="text-xl font-bold text-slate-200 mb-4">--:--</p><div class="text-5xl font-bold text-amber-500 my-4" id="sunTimer">계산중..</div><p class="text-[10px] text-slate-500 mt-4">*해당 지역의 위경도 좌표 기준 API 데이터</p><button onclick="closeModal('sunModal')" class="mt-4 w-full bg-slate-800 py-2 rounded font-bold text-white hover:bg-slate-700">닫기</button></div></div>
+    <div id="trainModal" class="modal"><div class="bg-white text-black p-5 rounded-xl w-11/12 max-w-sm text-center border-t-8 border-indigo-600"><h3 class="font-bold mb-2 text-xl text-indigo-700"><i class="fas fa-subway"></i> 막차 생존 타이머</h3><p class="text-xs text-slate-500 mb-4">택시비 폭탄 방어! 타야 할 막차 시간을 설정하세요.</p><input type="time" id="train-time" class="w-full text-center text-3xl font-bold p-3 bg-slate-100 rounded-lg border-2 border-indigo-200 mb-4" value="23:45" onchange="saveTrainTime()"><div id="trainTimer" class="text-5xl font-black text-slate-800 mb-4">--:--:--</div><div class="w-full bg-slate-200 rounded-full h-2 mb-4"><div id="train-bar" class="bg-indigo-500 h-2 rounded-full" style="width: 100%"></div></div><button onclick="closeModal('trainModal')" class="w-full bg-slate-200 py-3 rounded-lg font-bold">확인</button></div></div>
+    <div id="bigTextModal" class="big-text-modal" onclick="this.style.display='none'"><div id="bigTextContent" class="text-4xl font-bold leading-tight mb-4"></div><p class="text-lg text-yellow-300 font-bold" id="bigTextHours"></p><p class="mt-10 text-sm text-slate-400"><i class="fas fa-hand-pointer"></i> 화면을 터치하면 닫힙니다.</p></div>
+
+    <!-- 앱 핵심 비즈니스 로직 -->
+    <script id="tokyo-logic">
+        const storageKey = 't_app_v21';
+        let state = JSON.parse(localStorage.getItem(storageKey)) || {
+            fav: [], exp: [], sett: [], bingo: [], suica: 0, memo1: '', memo2: '', sosHotel: '',
+            rateKrw: 900, rateThb: 22.5, itinChk: {}, allergies: [], trainTime: '23:45'
+        };
+        function saveState() { localStorage.setItem(storageKey, JSON.stringify(state)); }
+
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func(...args), wait);
+            };
+        }
+
+        // Firebase 연동 데이터 관리 전역 변수
+        window.globalVotes = {};
+        let lastSpinTime = 0;
+        let lastBroadcastTime = 0;
+
+        window.addEventListener('firebaseLoaded', () => {
+            initFirebaseSync();
+        });
+
+        // 🌟 마법의 동기화 설정 (Firebase Listeners)
+        function initFirebaseSync() {
+            if(!window.sysDb) return;
+
+            // 1. 공용 장부 동기화
+            window.onValue(window.ref(window.sysDb, 'tokyo_party/ledger'), (snapshot) => {
+                state.sett = [];
+                snapshot.forEach(child => {
+                    state.sett.push({ key: child.key, ...child.val() });
+                });
+                renderSett();
+            });
+
+            // 2. 공동 장바구니 동기화
+            window.onValue(window.ref(window.sysDb, 'tokyo_party/cart'), (snapshot) => {
+                let html = '';
+                snapshot.forEach(child => {
+                    const item = child.val();
+                    const checked = item.done ? 'checked' : '';
+                    const line = item.done ? 'line-through text-slate-400' : 'text-slate-800 font-bold';
+                    html += `<li class="flex items-center gap-2 p-2 border-b bg-white">
+                        <input type="checkbox" class="w-5 h-5 accent-emerald-500 cursor-pointer" ${checked} onchange="toggleCartItem('${child.key}', this.checked)">
+                        <span class="flex-1 ${line}">${item.text}</span>
+                        <i class="fas fa-trash text-red-400 cursor-pointer p-2 hover:bg-red-50 rounded" onclick="deleteCartItem('${child.key}')"></i>
+                    </li>`;
+                });
+                document.getElementById('cartList').innerHTML = html;
+            });
+
+            // 3. 실시간 투표(랭킹) 동기화
+            window.onValue(window.ref(window.sysDb, 'tokyo_party/votes'), (snapshot) => {
+                window.globalVotes = snapshot.val() || {};
+                renderDB(); // 투표 반영 후 화면 새로고침
+                renderRanking();
+            });
+
+            // 4. 운명의 룰렛 동기화
+            window.onValue(window.ref(window.sysDb, 'tokyo_party/roulette'), (snapshot) => {
+                const data = snapshot.val();
+                if(data && data.time > lastSpinTime && (Date.now() - data.time < 10000)) { // 10초 이내 최신 룰렛만 강제 실행
+                    lastSpinTime = data.time;
+                    playGlobalRoulette(data.name, data.loc, data.note);
+                }
+            });
+
+            // 5. 전체 공지 발송 (긴급 팝업) 동기화
+            window.onValue(window.ref(window.sysDb, 'tokyo_party/broadcast'), (snapshot) => {
+                const data = snapshot.val();
+                if(data && data.time > lastBroadcastTime && (Date.now() - data.time < 30000)) { // 30초 이내 최신 공지만
+                    lastBroadcastTime = data.time;
+                    document.getElementById('broadcastMsg').innerText = data.msg;
+                    document.getElementById('broadcastModal').style.display = 'flex';
+                    if(navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]); // 쾅쾅쾅!
+                }
+            });
+        }
+
+        let myPartyName = "";
+        let partyRef = null;
+        let isPartyMode = false;
+        let partyMarkers = {};
+
+        function togglePartyMode() {
+            const btn = document.getElementById('btn-party');
+            if (isPartyMode) {
+                if(partyRef) window.remove(partyRef);
+                isPartyMode = false;
+                btn.innerHTML = '<i class="fas fa-users"></i> 파티 레이더';
+                btn.classList.replace('bg-pink-700', 'bg-pink-500');
+                btn.classList.add('animate-pulse');
+               
+                for(let key in partyMarkers) {
+                    if(map) map.removeLayer(partyMarkers[key]);
+                }
+                partyMarkers = {};
+                return;
+            }
+
+            myPartyName = prompt("지도에 표시할 내 닉네임을 입력하세요 (예: 친구1):");
+            if (!myPartyName) return;
+
+            try {
+                if(window.sysDb) {
+                    partyRef = window.ref(window.sysDb, 'tokyo_party/locations/' + myPartyName);
+                    isPartyMode = true;
+                    btn.innerHTML = '<i class="fas fa-satellite-dish"></i> 통신중...';
+                    btn.classList.replace('bg-pink-500', 'bg-pink-700');
+                    btn.classList.remove('animate-pulse');
+                    alert("파티 레이더 가동! 서버로 위치 동기화를 시작합니다.");
+
+                    window.onDisconnect(partyRef).remove();
+
+                    const allPartyRef = window.ref(window.sysDb, 'tokyo_party/locations');
+                    window.onValue(allPartyRef, (snapshot) => {
+                        const data = snapshot.val();
+                        if(data && map && isMapView) {
+                            for(let name in data) {
+                                if(name === myPartyName) continue;
+                                const coords = data[name];
+                                if(partyMarkers[name]) {
+                                    partyMarkers[name].setLatLng([coords.lat, coords.lng]);
+                                } else {
+                                    const icon = L.divIcon({
+                                        className: 'custom-div-icon',
+                                        html: `<div class="party-icon">${name.substring(0,2)}</div>`,
+                                        iconSize: [30, 30],
+                                        iconAnchor: [15, 15]
+                                    });
+                                    partyMarkers[name] = L.marker([coords.lat, coords.lng], {icon: icon, zIndexOffset: 1000}).addTo(map);
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch(e) {
+                alert("파이어베이스 접속 오류! 콘솔의 '규칙(Rules)'이 공개되어 있는지 확인하세요.");
+                console.error(e);
+                isPartyMode = false;
+            }
+        }
+
+        // 🌟 공동 장바구니 로직
+        function addCartItem() {
+            const el = document.getElementById('cItem');
+            const txt = el.value.trim();
+            if(!txt) return;
+            window.push(window.ref(window.sysDb, 'tokyo_party/cart'), { text: txt, done: false });
+            el.value = '';
+        }
+        function toggleCartItem(key, isDone) {
+            window.update(window.ref(window.sysDb, 'tokyo_party/cart/' + key), { done: isDone });
+        }
+        function deleteCartItem(key) {
+            window.remove(window.ref(window.sysDb, 'tokyo_party/cart/' + key));
+        }
+
+        // 🌟 실시간 투표 로직
+        function votePlace(id) {
+            const currentVotes = window.globalVotes[id] || 0;
+            window.set(window.ref(window.sysDb, 'tokyo_party/votes/' + id), currentVotes + 1);
+        }
+        function renderRanking() {
+            const list = document.getElementById('rankingList');
+            if(!list) return;
+            let sortable = [];
+            for (let id in window.globalVotes) {
+                if (window.globalVotes[id] > 0) {
+                    const place = db.find(p => p.id === id);
+                    if(place) sortable.push({ name: place.name.split(' (')[0], cnt: window.globalVotes[id] });
+                }
+            }
+            sortable.sort((a, b) => b.cnt - a.cnt);
+            if(sortable.length === 0) {
+                list.innerHTML = '<li class="text-slate-400 p-2">아직 투표된 맛집이 없습니다.</li>';
+                return;
+            }
+            list.innerHTML = sortable.slice(0, 10).map(s => `<li class="font-bold border-b pb-1"><span class="text-amber-600">👍 ${s.cnt}표</span> - ${s.name}</li>`).join('');
+        }
+
+        // 🌟 강제 룰렛 발동 로직
+        function triggerGlobalRoulette() {
+            const filteredDb = getFilteredDB();
+            if(filteredDb.length === 0) return alert("조건에 맞는 장소가 없습니다. 필터를 조정해주세요.");
+            if(!confirm("이 버튼을 누르면 일행 전원의 화면에 강제로 룰렛이 돌아갑니다. 실행할까요?")) return;
+            
+            const pick = filteredDb[Math.floor(Math.random() * filteredDb.length)];
+            // 서버에 룰렛 픽 기록 (이 순간 전원의 폰에서 룰렛 애니메이션 발동)
+            window.set(window.ref(window.sysDb, 'tokyo_party/roulette'), {
+                name: pick.name.split(' (')[0],
+                loc: pick.loc,
+                note: pick.note,
+                time: Date.now()
+            });
+        }
+        
+        function playGlobalRoulette(finalName, loc, note) {
+            let count = 0; const modal = document.getElementById('bigTextModal');
+            const content = document.getElementById('bigTextContent'); const hours = document.getElementById('bigTextHours');
+            const filteredDb = db; // 애니메이션용
+            modal.style.display = 'flex';
+            let timer = setInterval(() => {
+                const dummy = filteredDb[Math.floor(Math.random() * filteredDb.length)];
+                content.innerHTML = `🎲 운명의 룰렛 도는 중...<br><span class="text-3xl text-blue-400 mt-4 block">${dummy.name.split(' (')[0]}</span>`;
+                hours.innerText = "";
+                count++;
+                if(count > 15) {
+                    clearInterval(timer);
+                    content.innerHTML = `🎉 당첨!<br><span class="text-5xl text-yellow-400 mt-4 block">${finalName}</span>`;
+                    hours.innerText = `📍 ${loc} / 💰 ${note}`;
+                    if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                }
+            }, 100);
+        }
+
+        // 🌟 전체 공지 발송 로직
+        function sendBroadcast() {
+            const msg = prompt("일행 전원의 화면에 강제로 띄울 공지사항을 입력하세요:\n(예: 10분 뒤 시부야역 집결!)");
+            if(!msg || msg.trim() === '') return;
+            window.set(window.ref(window.sysDb, 'tokyo_party/broadcast'), {
+                msg: msg.trim(),
+                time: Date.now()
+            });
+            alert("전송 완료! 모든 일행의 폰에 팝업이 울립니다.");
+        }
+
+
+        // (기존 로직 유지 구간)
+        function startBombGame() {
+            const namesInput = document.getElementById('bombNames').value;
+            if(!namesInput) return alert("이름을 입력하세요!");
+            const names = namesInput.split(',').map(n => n.trim()).filter(n => n);
+            if(names.length < 2) return alert("최소 2명 이상 입력하세요.");
+
+            const resultBox = document.getElementById('bombResult');
+            const container = document.getElementById('bombContainer');
+            let count = 0;
+            let duration = Math.floor(Math.random() * 20) + 30;
+           
+            container.classList.remove('bomb-flash', 'bg-red-600');
+            container.classList.add('bg-white');
+            resultBox.classList.replace('text-white', 'text-slate-800');
+
+            let timer = setInterval(() => {
+                resultBox.innerText = names[count % names.length];
+                if(navigator.vibrate) navigator.vibrate(50);
+                count++;
+               
+                if(count > duration) {
+                    clearInterval(timer);
+                    const loser = names[Math.floor(Math.random() * names.length)];
+                    resultBox.innerText = loser;
+                   
+                    container.classList.remove('bg-white');
+                    container.classList.add('bomb-flash');
+                    resultBox.classList.replace('text-slate-800', 'text-white');
+                   
+                    if(navigator.vibrate) navigator.vibrate([500, 200, 500]);
+                   
+                    setTimeout(() => {
+                        container.classList.remove('bomb-flash');
+                        container.classList.add('bg-red-600');
+                    }, 1500);
+                }
+            }, 80);
+        }
+
+        function exportToCSV() {
+            if (state.exp.length === 0 && state.sett.length === 0) {
+                return alert("출력할 지출/정산 내역이 없습니다.");
+            }
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+            csvContent += "--- 총무 장부 (정산 내역) ---\n이름,금액(엔)\n";
+            state.sett.forEach(s => { csvContent += `${s.n},${s.a}\n`; });
+            csvContent += "\n--- 개인 가계부 (지출 내역) ---\n내역,금액(엔)\n";
+            let totalExp = 0;
+            state.exp.forEach(e => { csvContent += `${e.d},${e.a}\n`; totalExp += e.a; });
+            csvContent += `총합계,${totalExp}엔\n`;
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `도쿄_여행정산_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        }
+
+        function findRestroom() { window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent('public restroom near me'), '_blank'); }
+
+        let activeTags = [];
+        const tags = ['스시', '야키니쿠', '라멘', '돈카츠', '우동', '카페', '쇼핑', '야경', '오마카세', '가성비'];
+
+        function getThumbnailHtml(cat, name) {
+            let bgColorClass, icon;
+            if (cat === '식당') { bgColorClass = 'bg-amber-100 text-amber-600'; icon = '🍽️'; }
+            else if (cat === '디저트') { bgColorClass = 'bg-pink-100 text-pink-600'; icon = '🍰'; }
+            else if (cat === '관광') { bgColorClass = 'bg-sky-100 text-sky-600'; icon = '📸'; }
+            else if (cat === '쇼핑') { bgColorClass = 'bg-emerald-100 text-emerald-600'; icon = '🛍️'; }
+            else { bgColorClass = 'bg-slate-100 text-slate-600'; icon = '❓'; }
+            return `<div class="w-12 h-12 rounded-lg ${bgColorClass} flex items-center justify-center text-2xl shadow-sm flex-shrink-0 mt-1" title="${cat}">${icon}</div>`;
+        }
+
+        let map = null;
+        let markers = null;
+        let myLocationMarker = null;
+        let isMapView = false;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (typeof rawData !== 'undefined') {
+                const cats = ["식당", "디저트", "관광", "쇼핑"];
+                db = rawData.map(p => ({
+                    id: p[0] + '_' + p[1].replace(/\s/g, ''), catId: p[0], cat: cats[p[0]],
+                    name: p[1], loc: p[2], desc: p[3], note: p[4], lat: p[5], lng: p[6], hours: p[7]
+                }));
+            }
+            initItinerary(); renderTags(); renderDB(); document.getElementById('nav-itin').click();
+            setInterval(updateLastTrainTimer, 1000);
+            setInterval(() => { checkRealTimeSchedule(); if (!document.getElementById('tab-db').classList.contains('hidden')) renderDB(); }, 60000);
+            const searchInput = document.getElementById('db-search');
+            if (searchInput) searchInput.addEventListener('keyup', debounce(() => renderDB(), 300));
+        });
+
+        function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
+       
+        function switchTab(id) {
+            document.querySelectorAll('.content-section').forEach(s => s.classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('tab-active', 'bg-blue-50', 'text-blue-600'); btn.classList.add('text-slate-500');
+            });
+            const btn = document.getElementById(id.replace('tab-', 'nav-'));
+            if(btn) { btn.classList.add('tab-active', 'bg-blue-50', 'text-blue-600'); btn.classList.remove('text-slate-500'); }
+            if(id === 'tab-itin') { checkRealTimeSchedule(); updateProgress(); }
+            if(id === 'tab-db') { renderDB(); if(isMapView && map) setTimeout(() => map.invalidateSize(), 100); }
+        }
+       
+        function toggleItin(type) {
+            document.getElementById('itin-friends').classList.add('hidden'); document.getElementById('itin-parents').classList.add('hidden');
+            document.getElementById('prog-friends').classList.add('hidden'); document.getElementById('prog-parents').classList.add('hidden');
+            document.querySelectorAll('#btn-itin-friends, #btn-itin-parents').forEach(btn => {
+                btn.classList.replace('bg-white','bg-transparent'); btn.classList.replace('shadow','shadow-none'); btn.classList.replace('text-blue-600','text-slate-500');
+            });
+            document.getElementById(`itin-${type}`).classList.remove('hidden'); document.getElementById(`prog-${type}`).classList.remove('hidden');
+            const btn = document.getElementById(`btn-itin-${type}`);
+            btn.classList.add('bg-white', 'shadow', 'text-blue-600'); btn.classList.remove('bg-transparent', 'shadow-none', 'text-slate-500');
+        }
+
+        function initItinerary() {
+            document.querySelectorAll('#itin-friends li, #itin-parents li').forEach((li, idx) => {
+                const id = 'itin_' + idx; const isChecked = state.itinChk[id] ? 'checked' : ''; const timeHtml = li.innerHTML;
+                li.className = `flex items-center gap-2 p-2 rounded-lg transition-colors ${isChecked ? 'dimmed-item bg-slate-50' : ''}`; li.id = id;
+                li.innerHTML = `<input type="checkbox" class="w-5 h-5 accent-blue-600" ${isChecked} onchange="toggleItinCheck('${id}', this)"><div class="flex-1">${timeHtml}</div>`;
+            });
+            updateProgress(); checkRealTimeSchedule();
+        }
+       
+        function toggleItinCheck(id, chk) {
+            state.itinChk[id] = chk.checked; saveState(); const li = document.getElementById(id);
+            if(chk.checked) li.classList.add('dimmed-item', 'bg-slate-50'); else li.classList.remove('dimmed-item', 'bg-slate-50');
+            updateProgress(); checkRealTimeSchedule();
+        }
+       
+        function updateProgress() {
+            ['friends', 'parents'].forEach(type => {
+                const items = document.querySelectorAll(`#itin-${type} li`); if(items.length === 0) return;
+                let checkedCount = 0; items.forEach(li => { if(state.itinChk[li.id]) checkedCount++; });
+                const percent = Math.round((checkedCount / items.length) * 100);
+                document.getElementById(`prog-${type}-bar`).style.width = percent + '%'; document.getElementById(`prog-${type}-txt`).innerText = percent + '%';
+            });
+        }
+       
+        function checkRealTimeSchedule() {
+            const now = new Date(); const utc = now.getTime() + (now.getTimezoneOffset() * 60000); const tokyoTime = new Date(utc + (3600000 * 9));
+            const currentMins = tokyoTime.getHours() * 60 + tokyoTime.getMinutes();
+            document.querySelectorAll('.day-card li').forEach(li => {
+                li.classList.remove('highlight-item'); const timeAttr = li.getAttribute('data-time');
+                if(!timeAttr || timeAttr.includes('Day')) return;
+                const [h, m] = timeAttr.split(':').map(Number); const itemMins = h * 60 + m;
+                if(!state.itinChk[li.id] && currentMins >= itemMins && currentMins < itemMins + 120) { li.classList.add('highlight-item'); }
+            });
+        }
+
+        function getTokyoStatus(timeStr) {
+            if (!timeStr || timeStr === 'none') return '';
+            const tokyoDate = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
+            const tDay = tokyoDate.getDay();
+            const currentMins = tokyoDate.getHours() * 60 + tokyoDate.getMinutes();
+
+            const parts = timeStr.split('/');
+            if (parts.length < 2) return '';
+
+            const closedDays = parts[0].split(',').map(Number);
+            if (closedDays.includes(tDay)) return '<span class="bg-slate-200 text-slate-600 px-1 rounded text-[10px] whitespace-nowrap ml-1">⚪ 휴무</span>';
+            if (parts[1] === '0000-2359') return '<span class="bg-green-100 text-green-700 px-1 rounded text-[10px] font-bold whitespace-nowrap ml-1">🟢 24시간 영업</span>';
+
+            const parseTime = (str) => parseInt(str.substring(0, 2)) * 60 + parseInt(str.substring(2, 4));
+            const [opStartStr, opEndStr] = parts[1].split('-');
+            let opMins = parseTime(opStartStr);
+            let clMins = parseTime(opEndStr);
+
+            let brStartMins = null, brEndMins = null;
+            let inBreak = false;
+           
+            if (parts.length === 3 && parts[2] !== 'none') {
+                const [bStart, bEnd] = parts[2].split('-');
+                brStartMins = parseTime(bStart);
+                brEndMins = parseTime(bEnd);
+                if (currentMins >= brStartMins && currentMins < brEndMins) {
+                    inBreak = true;
+                }
+            }
+
+            let isActiveNow = false;
+            if (clMins <= opMins) {
+                if (currentMins >= opMins || currentMins < clMins) isActiveNow = true;
+            } else {
+                if (currentMins >= opMins && currentMins < clMins) isActiveNow = true;
+            }
+
+            if (inBreak) {
+                const diff = brEndMins - currentMins;
+                if (diff > 0 && diff <= 60) return `<span class="bg-yellow-100 text-yellow-700 px-1 rounded text-[10px] font-bold whitespace-nowrap ml-1">🟡 재오픈 ${diff}분 전</span>`;
+                return '<span class="bg-yellow-100 text-yellow-700 px-1 rounded text-[10px] whitespace-nowrap ml-1">🟡 브레이크타임</span>';
+            }
+
+            if (isActiveNow) {
+                if (brStartMins !== null && currentMins < brStartMins) {
+                    const diffBreak = brStartMins - currentMins;
+                    if (diffBreak > 0 && diffBreak <= 60) {
+                        return `<span class="bg-yellow-100 text-yellow-700 px-1 rounded text-[10px] font-bold whitespace-nowrap ml-1">🟡 B.T ${diffBreak}분 전</span>`;
+                    }
+                }
+               
+                let diffClose;
+                if (clMins <= opMins && currentMins >= opMins) {
+                    diffClose = (clMins + 1440) - currentMins;
+                } else {
+                    diffClose = clMins - currentMins;
+                }
+               
+                if (diffClose > 0 && diffClose <= 60) {
+                    return `<span class="bg-red-100 text-red-600 px-1 rounded text-[10px] font-bold whitespace-nowrap ml-1 pulse">🔴 마감 ${diffClose}분 전</span>`;
+                }
+               
+                return '<span class="bg-green-100 text-green-700 px-1 rounded text-[10px] font-bold whitespace-nowrap ml-1">🟢 영업중</span>';
+            }
+
+            let diffOpen;
+            if (currentMins < opMins) {
+                diffOpen = opMins - currentMins;
+            } else {
+                diffOpen = (opMins + 1440) - currentMins;
+            }
+
+            if (diffOpen > 0 && diffOpen <= 60) {
+                return `<span class="bg-yellow-100 text-yellow-700 px-1 rounded text-[10px] font-bold whitespace-nowrap ml-1">🟡 오픈 ${diffOpen}분 전</span>`;
+            }
+
+            return '<span class="bg-red-100 text-red-600 px-1 rounded text-[10px] whitespace-nowrap ml-1">🔴 영업종료</span>';
+        }
+
+        function formatHoursText(timeStr) {
+            if (!timeStr || timeStr === 'none') return '';
+            const parts = timeStr.split('/'); if (parts.length < 2) return '';
+            const opHours = parts[1]; let timeText = '';
+            if (opHours === '0000-2359') { timeText = '24시간 영업'; }
+            else {
+                const opStart = opHours.split('-')[0].padStart(4, '0'); const opEnd = opHours.split('-')[1].padStart(4, '0');
+                timeText = `${opStart.slice(0,2)}:${opStart.slice(2,4)}~${opEnd.slice(0,2)}:${opEnd.slice(2,4)}`;
+            }
+            let brText = '';
+            if (parts.length === 3 && parts[2] !== 'none') {
+                const brStart = parts[2].split('-')[0].padStart(4, '0'); const brEnd = parts[2].split('-')[1].padStart(4, '0');
+                brText = ` (B.T ${brStart.slice(0,2)}:${brStart.slice(2,4)}~${brEnd.slice(0,2)}:${brEnd.slice(2,4)})`;
+            }
+            let closeText = ''; const daysMap = ['일', '월', '화', '수', '목', '금', '토'];
+            if (parts[0] !== '7') {
+                const closedDays = parts[0].split(',').map(Number); const closedDaysStr = closedDays.map(d => daysMap[d]).join(',');
+                closeText = ` <span class="text-red-400 font-bold ml-1">[${closedDaysStr} 휴무]</span>`;
+            }
+            return `<div class="text-[11px] text-slate-500 mt-1 flex items-center gap-1"><i class="far fa-clock"></i> <span>${timeText}${brText}</span>${closeText}</div>`;
+        }
+
+        let routeList = [];
+        function toggleRoute(name, loc, checkbox) { if(checkbox.checked) routeList.push({name, loc}); else routeList = routeList.filter(r => r.name !== name); }
+        function openRouter() {
+            if(routeList.length < 2) return alert("경로를 만들려면 장소를 2개 이상 체크해주세요!");
+            let url = "https://www.google.com/maps/dir/?api=1";
+            const origin = encodeURIComponent(routeList[0].name + " " + routeList[0].loc);
+            const destination = encodeURIComponent(routeList[routeList.length-1].name + " " + routeList[routeList.length-1].loc);
+            url += "&origin=" + origin + "&destination=" + destination;
+            if(routeList.length > 2) {
+                const waypoints = routeList.slice(1, -1).map(r => encodeURIComponent(r.name + " " + r.loc)).join('|');
+                url += "&waypoints=" + waypoints;
+            }
+            window.open(url, '_blank');
+        }
+
+        function copyText(txt) { if(navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(txt).then(() => alert(`"${txt}" 복사 완료!`)); } else { prompt("아래 텍스트를 복사하세요:", txt); } }
+       
+        function renderTags() {
+            document.getElementById('hashtag-container').innerHTML = tags.map(t => {
+                const isActive = activeTags.includes(t);
+                const bgClass = isActive ? 'bg-blue-500 text-white border-blue-500' : 'bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-600';
+                return `<button onclick="toggleTag('${t}')" class="border px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${bgClass}">#${t}</button>`;
+            }).join('');
+        }
+        function toggleTag(tag) { if(activeTags.includes(tag)) activeTags = activeTags.filter(t => t !== tag); else activeTags.push(tag); renderTags(); renderDB(); }
+        function toggleFav(id) { if(state.fav.includes(id)) state.fav = state.fav.filter(x => x!==id); else state.fav.push(id); saveState(); renderDB(); }
+       
+        function getDist(lat1, lon1, lat2, lon2) { const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180; const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2); return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); }
+       
+        let watchId = null, isTracking = false;
+        function toggleGPS() {
+            const btn = document.getElementById('btn-gps');
+            if(isTracking) {
+                navigator.geolocation.clearWatch(watchId); isTracking=false;
+                btn.innerHTML='<i class="fas fa-location-crosshairs"></i> GPS 켜기';
+                btn.classList.remove('bg-red-500','pulse'); btn.classList.add('bg-blue-600');
+                document.getElementById('th-dist').classList.add('hidden'); renderDB();
+                if(myLocationMarker && map) map.removeLayer(myLocationMarker);
+            } else {
+                if(!navigator.geolocation) return alert("GPS를 지원하지 않는 기기입니다.");
+                alert("GPS 실시간 위치 추적을 켭니다.");
+                btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> 추적중';
+                btn.classList.remove('bg-blue-600'); btn.classList.add('bg-red-500','pulse');
+               
+                watchId = navigator.geolocation.watchPosition(pos => {
+                    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+                    db.forEach(item => item.dist = getDist(lat, lng, item.lat, item.lng));
+                    db.sort((a,b) => a.dist - b.dist);
+                    document.getElementById('th-dist').classList.remove('hidden'); renderDB();
+                   
+                    if(map && isMapView) {
+                        if(myLocationMarker) { myLocationMarker.setLatLng([lat, lng]); }
+                        else { myLocationMarker = L.circleMarker([lat, lng], {radius: 8, fillColor: "#3b82f6", color: "#ffffff", weight: 2, fillOpacity: 1}).addTo(map); }
+                        map.flyTo([lat, lng], 15, { animate: true, duration: 1 });
+                    }
+                    if(isPartyMode && partyRef && window.set) { window.set(partyRef, {lat: lat, lng: lng}); }
+                }, e => { alert("GPS 오류 발생"); toggleGPS(); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+                isTracking=true;
+            }
+        }
+
+        function openBigText(txt) { document.getElementById('bigTextContent').innerText = txt; document.getElementById('bigTextModal').style.display = 'flex'; }
+
+        function getFilteredDB() {
+            const q = document.getElementById('db-search').value.toLowerCase();
+            const catF = document.getElementById('db-cat').value;
+            const favF = document.getElementById('db-fav').checked;
+            const openF = document.getElementById('db-open').checked;
+           
+            return db.filter(i => {
+                const searchStr = (i.name + " " + i.loc + " " + i.cat + " " + i.desc + " " + i.note).toLowerCase();
+                if (q && !searchStr.includes(q)) return false;
+                if (activeTags.length > 0) {
+                    const matchesTags = activeTags.every(tag => searchStr.includes(tag.toLowerCase()));
+                    if (!matchesTags) return false;
+                }
+                if (catF === 'near') { if (!i.dist || i.dist > 1) return false; } else if (catF !== 'all' && i.cat !== catF) return false;
+                if (favF && !state.fav.includes(i.id)) return false;
+                if (openF) {
+                    const status = getTokyoStatus(i.hours);
+                    if (status.includes('🔴 영업종료') || status.includes('⚪ 휴무')) return false;
+                }
+                return true;
+            });
+        }
+
+        function toggleMapView() {
+            isMapView = !isMapView;
+            const tableContainer = document.getElementById('table-container');
+            const mapView = document.getElementById('map-view');
+            const btn = document.getElementById('btn-map');
+
+            if (isMapView) {
+                tableContainer.classList.add('hidden'); mapView.classList.remove('hidden');
+                btn.innerHTML = '<i class="fas fa-list"></i> 목록 보기'; btn.classList.replace('bg-amber-500', 'bg-slate-500');
+                initOrUpdateMap();
+            } else {
+                tableContainer.classList.remove('hidden'); mapView.classList.add('hidden');
+                btn.innerHTML = '<i class="fas fa-map"></i> 지도 보기'; btn.classList.replace('bg-slate-500', 'bg-amber-500');
+            }
+        }
+
+        function initOrUpdateMap() {
+            if (!map) {
+                map = L.map('map-view').setView([35.6895, 139.6917], 11);
+                L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=ko', { attribution: '© Google Maps' }).addTo(map);
+                markers = L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 50 });
+                map.addLayer(markers);
+            }
+            markers.clearLayers();
+            const filteredDb = getFilteredDB();
+            let bounds = [];
+
+            filteredDb.forEach(item => {
+                if(item.lat && item.lng) {
+                    const iconCat = item.cat === '식당' ? '🍽️' : item.cat === '디저트' ? '🍰' : item.cat === '관광' ? '📸' : '🛍️';
+                    const customIcon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div class="bg-white rounded-full p-1 shadow-md border border-slate-300 text-lg flex items-center justify-center w-8 h-8">${iconCat}</div>`,
+                        iconSize: [32, 32], iconAnchor: [16, 16]
+                    });
+
+                    const marker = L.marker([item.lat, item.lng], {icon: customIcon});
+                    const safeSearch = encodeURIComponent(item.name.split(' (')[0] + ' ' + item.loc);
+                    marker.bindPopup(`
+                        <div class="font-bold text-base mb-1">${item.name.split(' (')[0]}</div>
+                        <div class="text-slate-600 text-xs mb-2">${item.desc}</div>
+                        <a href="https://www.google.com/maps/search/?api=1&query=${safeSearch}" target="_blank" class="bg-blue-50 text-blue-600 px-3 py-1 rounded font-bold text-xs inline-block text-center w-full border border-blue-200 mb-1">구글맵 위치보기</a>
+                        <a href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}" target="_blank" class="bg-emerald-50 text-emerald-600 px-3 py-1 rounded font-bold text-xs inline-block text-center w-full border border-emerald-200">현재 위치에서 길찾기</a>
+                    `);
+                    markers.addLayer(marker);
+                    bounds.push([item.lat, item.lng]);
+                }
+            });
+            if (bounds.length > 0) map.fitBounds(bounds, {padding: [30, 30]});
+            setTimeout(() => map.invalidateSize(), 100);
+        }
+
+        function renderDB() {
+            const tbody = document.getElementById('db-body'); let htmlStr = '';
+            const filtered = getFilteredDB();
+           
+            filtered.forEach(i => {
+                const isFav = state.fav.includes(i.id);
+                const heart = `<i onclick="toggleFav('${i.id}')" class="fas fa-heart text-lg cursor-pointer ${isFav?'text-red-500':'text-slate-300'}"></i>`;
+                const distStr = isTracking && i.dist ? (i.dist<1 ? (i.dist*1000).toFixed(0)+'m' : i.dist.toFixed(1)+'km') : '';
+                const primaryNameMatch = i.name.match(/^(.*?)\s*\(/);
+                const queryName = primaryNameMatch ? primaryNameMatch[1] : i.name;
+                const searchName = encodeURIComponent(queryName + " " + i.loc);
+               
+                const mapL = `<a href="https://www.google.com/maps/search/?api=1&query=${searchName}" target="_blank" class="text-blue-500 ml-2" title="구글맵 위치"><i class="fas fa-map-marker-alt"></i></a>`;
+                const dirL = `<a href="https://www.google.com/maps/dir/?api=1&destination=${i.lat},${i.lng}" target="_blank" class="text-emerald-500 ml-2" title="현재 위치에서 길찾기"><i class="fas fa-directions"></i></a>`;
+                const safeName = i.name.replace(/'/g, "\\'"); const safeLoc = i.loc.replace(/'/g, "\\'");
+               
+                let extraLinks = `<i class="far fa-copy text-slate-400 hover:text-slate-600 ml-2 cursor-pointer" onclick="copyText('${safeName} ${safeLoc}')" title="이름 복사"></i>`;
+               
+                if (i.cat === '식당' || i.cat === '디저트') {
+                    const engNameMatch = i.name.match(/\(([^)]+)\)/);
+                    const tabelogName = engNameMatch ? engNameMatch[1] : queryName;
+                    extraLinks += `<a href="https://tabelog.com/kr/rstLst/?sw=${encodeURIComponent(tabelogName)}" target="_blank" class="text-orange-400 ml-2" title="타베로그 검색"><i class="fas fa-utensils"></i></a>`;
+                }
+                const instaTag = encodeURIComponent(queryName.replace(/[^a-zA-Z0-9가-힣]/g, ''));
+                extraLinks += `<a href="https://www.instagram.com/explore/tags/${instaTag}/" target="_blank" class="text-pink-500 ml-2" title="인스타 검색"><i class="fab fa-instagram"></i></a>`;
+               
+                // 투표 뱃지 생성
+                const voteCnt = window.globalVotes ? (window.globalVotes[i.id] || 0) : 0;
+                const voteBadge = `<span class="bg-amber-50 text-amber-600 px-2 py-1 rounded border border-amber-200 text-[10px] font-bold cursor-pointer hover:bg-amber-100 ml-2" onclick="votePlace('${i.id}')" title="일행 투표하기">👍 ${voteCnt}</span>`;
+
+                const statusBadge = getTokyoStatus(i.hours); const hoursText = formatHoursText(i.hours);
+                const isChecked = routeList.some(r => r.name === i.name) ? 'checked' : '';
+                const thumbHtml = getThumbnailHtml(i.cat, i.name);
+
+                htmlStr += `
+                    <tr class="hover:bg-slate-50 border-b">
+                        <td class="px-2 py-3 text-center"><input type="checkbox" class="w-4 h-4" ${isChecked} onchange="toggleRoute('${safeName}', '${safeLoc}', this)"></td>
+                        <td class="px-2 py-3 text-center">${heart}</td>
+                        <td class="px-3 py-3">
+                            <div class="flex items-start gap-3">
+                                ${thumbHtml}
+                                <div class="font-bold text-slate-800 dark:text-slate-200 leading-tight w-full">
+                                    <span class="cursor-pointer text-blue-600 underline" onclick="openBigText('${safeName}')">${i.name}</span> ${statusBadge}
+                                    <div class="mt-1 flex items-center flex-wrap gap-1"><span class="text-xs font-normal text-slate-500">${i.loc}</span> ${voteBadge} ${mapL} ${dirL} ${extraLinks}</div>
+                                    ${hoursText}
+                                </div>
+                            </div>
+                        </td>
+                        ${isTracking ? `<td class="px-3 py-3 text-red-500 font-bold whitespace-nowrap">${distStr}</td>` : ''}
+                        <td class="px-3 py-3 text-xs text-slate-600 dark:text-slate-400">
+                            <span class="bg-slate-200 text-slate-700 px-1 rounded mr-1">${i.cat}</span>${i.desc}
+                            <br><span class="text-slate-400 font-semibold">${i.note}</span>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = htmlStr;
+            if (isMapView) initOrUpdateMap();
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+            if(id==='bingoModal') renderBingo();
+            if(id==='expModal') renderExp();
+            if(id==='advSettlerModal') renderSett();
+            if(id==='rankingModal') renderRanking();
+            if(id==='memoModal') loadMemo();
+            if(id==='suicaModal') updateSuicaDisplay();
+            if(id==='sosModal') loadSOS();
+            if(id==='weatherModal') fetchWeather();
+            if(id==='sunModal') fetchSunset();
+            if(id==='allergyModal') initAllergy();
+            if(id==='trainModal') document.getElementById('train-time').value = state.trainTime || '23:45';
+            if(id==='calcModal') { document.getElementById('rateKrw').value = state.rateKrw || 900; document.getElementById('rateThb').value = state.rateThb || 22.5; doCalc(); }
+        }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+       
+        function saveTrainTime() { state.trainTime = document.getElementById('train-time').value; saveState(); }
+        function updateLastTrainTimer() {
+            if(!document.getElementById('trainModal').classList.contains('active')) return;
+            const targetTime = state.trainTime || '23:45'; const [th, tm] = targetTime.split(':').map(Number); const now = new Date(); const target = new Date(); target.setHours(th, tm, 0, 0);
+            if (now > target) target.setDate(target.getDate() + 1); const diff = target - now;
+            if (diff < 0) { document.getElementById('trainTimer').innerText = "00:00:00"; document.getElementById('train-bar').style.width = "0%"; return; }
+            const h = Math.floor(diff / 3600000).toString().padStart(2, '0'); const m = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0'); const s = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+            const display = document.getElementById('trainTimer'); display.innerText = `${h}:${m}:${s}`;
+            if(h === '00' && parseInt(m) < 30) display.className = "text-5xl font-black text-red-600 mb-4 pulse"; else display.className = "text-5xl font-black text-slate-800 mb-4";
+            let pct = (diff / (12 * 3600000)) * 100; if(pct > 100) pct = 100; document.getElementById('train-bar').style.width = pct + "%"; document.getElementById('train-bar').style.backgroundColor = pct < 10 ? '#ef4444' : '#6366f1';
+        }
+       
+        function initAllergy() { const boxes = document.querySelectorAll('#alg-options input[type="checkbox"]'); boxes.forEach(b => { b.checked = state.allergies.includes(b.value); b.addEventListener('change', (e) => { if(e.target.checked) state.allergies.push(e.target.value); else state.allergies = state.allergies.filter(x => x !== e.target.value); saveState(); }); }); }
+        function showAllergyCard() { if(state.allergies.length === 0) return alert("선택된 식재료가 없습니다."); document.getElementById('alg-list-display').innerHTML = state.allergies.map(a => `<span class="bg-red-100 px-2 py-1 rounded border border-red-300">${a}</span>`).join(''); document.getElementById('alg-fullcard').style.transform = 'translateY(0)'; }
+        function hideAllergyCard() { document.getElementById('alg-fullcard').style.transform = 'translateY(100%)'; }
+       
+        async function fetchSunset() {
+            const loc = document.getElementById('sun-city').value.split(','); const lat = loc[0], lng = loc[1];
+            try { let res = await fetch(`https://api.sunrisesunset.io/json?lat=${lat}&lng=${lng}`); let data = await res.json(); if(data && data.results) { document.getElementById('sun-time-txt').innerText = data.results.sunset; document.getElementById('sunTimer').innerText = "일몰 확인 완료!"; document.getElementById('sunTimer').className = "text-2xl font-bold text-amber-500 my-4"; } } catch(e) { document.getElementById('sun-time-txt').innerText = "불러오기 실패"; }
+        }
+       
+        function getOutfit(temp) { if(temp >= 25) return "반팔, 린넨, 샌들"; if(temp >= 20) return "얇은 긴팔, 반팔+가디건"; if(temp >= 15) return "긴팔, 맨투맨"; if(temp >= 10) return "자켓, 트렌치코트"; if(temp >= 5) return "코트, 경량패딩"; return "두꺼운 패딩, 장갑 필수!"; }
+       
+        async function fetchWeather() {
+            try {
+                const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.6917&daily=temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo');
+                const data = await res.json();
+                let html = '<div class="font-bold text-blue-800 mb-2 border-b pb-1">📍 도쿄 3일 예보</div>';
+                for(let i=0; i<3; i++) {
+                    const dateObj = new Date(data.daily.time[i]);
+                    const dateStr = `${dateObj.getMonth()+1}/${dateObj.getDate()}`;
+                    const max = Math.round(data.daily.temperature_2m_max[i]);
+                    const min = Math.round(data.daily.temperature_2m_min[i]);
+                    const avg = (max+min)/2;
+                    html += `<div class="flex items-center justify-between bg-slate-50 p-2 rounded border mb-1"><span class="font-bold w-12 text-slate-700 text-center">${dateStr}</span><span class="text-blue-500 font-bold">${min}°</span><span class="text-slate-300">-</span><span class="text-red-500 font-bold">${max}°</span><span class="text-xs text-slate-500 w-28 text-right font-bold">${getOutfit(avg)}</span></div>`;
+                }
+                document.getElementById('weather-content').innerHTML = html;
+            } catch(e) { document.getElementById('weather-content').innerHTML = '날씨 로딩 실패'; }
+        }
+       
+        function updateRates() { state.rateKrw = parseFloat(document.getElementById('rateKrw').value) || 900; state.rateThb = parseFloat(document.getElementById('rateThb').value) || 22.5; saveState(); doCalc(); }
+        async function fetchRates() { try { const btn = document.querySelector('#calcModal .fa-sync-alt'); btn.classList.add('fa-spin'); let res = await fetch('https://open.er-api.com/v6/latest/JPY'); let data = await res.json(); if(data && data.rates) { state.rateKrw = (data.rates.KRW * 100).toFixed(2); state.rateThb = (data.rates.THB * 100).toFixed(2); document.getElementById('rateKrw').value = state.rateKrw; document.getElementById('rateThb').value = state.rateThb; saveState(); doCalc(); alert('✅ 실시간 환율 업데이트 완료!'); } btn.classList.remove('fa-spin'); } catch(e) { document.querySelector('#calcModal .fa-sync-alt').classList.remove('fa-spin'); } }
+        function doCalc() { const y = parseFloat(document.getElementById('calcIn').value) || 0; const rK = state.rateKrw; const rT = state.rateThb; document.getElementById('cThb').innerText = ((y / 100) * rT).toLocaleString('ko-KR', {maximumFractionDigits: 1}); document.getElementById('cKrw').innerText = ((y / 100) * rK).toLocaleString('ko-KR', {maximumFractionDigits: 0}); }
+        function doNpay() { const amt = document.getElementById('nAmt').value, ppl = document.getElementById('nPpl').value; if(!amt || !ppl || ppl==0) return; const p = amt/ppl; const krw = ((p / 100) * state.rateKrw).toLocaleString('ko-KR', {maximumFractionDigits: 0}); const thb = ((p / 100) * state.rateThb).toLocaleString('ko-KR', {maximumFractionDigits: 1}); document.getElementById('nRes').innerText = `1인당: ${Math.round(p)}엔\n(약 ${krw}원 / ${thb}바트)`; }
+        function shareNpay() { const txt = document.getElementById('nRes').innerText; if(!txt) return alert("먼저 정산을 진행해주세요."); const shareText = `[도쿄 여행 N빵 알림]\n${txt}\n\n입금 부탁해! 💸`; if(navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(shareText).then(()=>alert("복사되었습니다! 카톡에 붙여넣기 하세요.")).catch(e=>prompt("아래 텍스트 복사:", shareText)); } else { prompt("아래 텍스트 복사:", shareText); } }
+        function checkTax() { const v = parseInt(document.getElementById('taxIn').value || 0); const res = document.getElementById('taxRes'); const bar = document.getElementById('taxBar'); let pct = (v / 5500) * 100; if(pct > 100) pct = 100; bar.style.width = pct + "%"; if(v >= 5500) { bar.className = "bg-green-500 h-4 transition-all duration-300"; res.className = "p-3 rounded text-sm font-bold text-center mt-2 bg-green-100 text-green-700"; res.innerText = `면세 가능! 🎉 (약 ${Math.floor(v/1.1 * 0.1)}엔 환급)`; } else { bar.className = "bg-yellow-400 h-4 transition-all duration-300"; res.className = "p-3 rounded text-sm font-bold text-center mt-2 bg-red-100 text-red-700"; res.innerText = `면세 불가 (5,500엔까지 ${5500 - v}엔 남음)`; } }
+        function saveSOS() { state.sosHotel = document.getElementById('sosHotelIn').value; saveState(); }
+        function loadSOS() { document.getElementById('sosHotelIn').value = state.sosHotel || ''; }
+        function sendSOS() { if(!navigator.geolocation) return alert("GPS 오류"); alert("내 위치 탐색중..."); navigator.geolocation.getCurrentPosition(pos => { const link = `https://www.google.com/maps/search/?api=1&query=${pos.coords.latitude},${pos.coords.longitude}`; const text = `🚨 나 여기 있어! 데리러 와!\n지도 보기: ${link}`; if(navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(() => alert("복사 완료! 카톡에 붙여넣으세요.")); } else { prompt("복사:", text); } }, e => alert("GPS 오류"), {enableHighAccuracy: false, maximumAge: 30000, timeout: 15000}); }
+        function saveMemo() { state.memo1 = document.getElementById('memo1').value; state.memo2 = document.getElementById('memo2').value; saveState(); }
+        function loadMemo() { document.getElementById('memo1').value = state.memo1 || ''; document.getElementById('memo2').value = state.memo2 || ''; }
+        function setSuica() { const v = document.getElementById('sBalInput').value; if(v) { state.suica = parseInt(v); saveState(); updateSuicaDisplay(); } }
+        function addSuica(amt) { state.suica += amt; saveState(); updateSuicaDisplay(); }
+        function updateSuicaDisplay() { document.getElementById('sBalDisplay').innerText = `¥ ${state.suica}`; }
+        function playTTS(ko, ja, pron) { document.getElementById('tts-ko').innerText = `🇰🇷 ${ko}`; document.getElementById('tts-ja').innerText = `🇯🇵 ${ja}`; document.getElementById('tts-pron').innerText = `🗣️ ${pron}`; const u = new SpeechSynthesisUtterance(ja); u.lang = 'ja-JP'; speechSynthesis.speak(u); }
+        
+        // 🌟 총무장부 로직 변경 (Firebase 연결)
+        function addSett() { 
+            const n = document.getElementById('sName').value; const a = document.getElementById('sAmt').value; 
+            if(!n || !a) return; 
+            window.push(window.ref(window.sysDb, 'tokyo_party/ledger'), { n: n, a: parseInt(a) });
+            document.getElementById('sName').value = ''; document.getElementById('sAmt').value = '';
+        }
+        function deleteSett(key) {
+            if(confirm("이 내역을 삭제할까요? (일행 전체에서도 삭제됩니다)")) {
+                window.remove(window.ref(window.sysDb, 'tokyo_party/ledger/' + key));
+            }
+        }
+        function renderSett() { 
+            document.getElementById('sList').innerHTML = state.sett.map(s => `<li class="flex justify-between border-b py-1"><span>${s.n}</span><span>${s.a}엔 <i class="fas fa-times text-red-400 ml-2 cursor-pointer" onclick="deleteSett('${s.key}')"></i></span></li>`).join(''); 
+        }
+
+        function calcSett() { const totals = {}; let totalAll = 0; state.sett.forEach(s => { totals[s.n] = (totals[s.n]||0) + s.a; totalAll += s.a; }); const ppl = Object.keys(totals); if(ppl.length===0) return; const avg = totalAll / ppl.length; let res = `총 ${totalAll}엔 / 1인 평균 ${avg.toFixed(0)}엔\n\n`; ppl.forEach(p => { const diff = totals[p] - avg; res += `${p}: ${diff > 0 ? (diff).toFixed(0)+'엔 받을 돈 있음' : (-diff).toFixed(0)+'엔 내야 함'}\n`; }); document.getElementById('sRes').innerText = res; }
+        
+        function addExp() { const a = document.getElementById('eAmt').value, d = document.getElementById('eDesc').value; if(!a || !d) return; state.exp.push({a:parseInt(a), d}); saveState(); renderExp(); }
+        function renderExp() { let sum = 0; document.getElementById('eList').innerHTML = state.exp.map((e,i)=>{ sum+=e.a; return `<li class="flex justify-between border-b py-1"><span>${e.d}</span><span>${e.a}엔 <i class="fas fa-times text-red-400 ml-1 cursor-pointer" onclick="state.exp.splice(${i},1);saveState();renderExp()"></i></span></li>`}).join(''); document.getElementById('eTotal').innerText = sum; }
+        const bItems = ['로손\n모찌롤','세븐\n푸딩','아사히\n생맥주','카라아게군','이로하스','닛신\n컵누들','피노\n아이스크림','쟈가리코','돈베이\n키츠네우동','타마고\n산도','메론빵','호로요이','당고','가리가리군','야키소바빵','명란삼각김밥'];
+        function renderBingo() { if(state.bingo.length===0) state.bingo = new Array(16).fill(false); document.getElementById('bingoGrid').innerHTML = bItems.map((v,i) => `<div onclick="state.bingo[${i}]=!state.bingo[${i}];saveState();renderBingo()" class="cursor-pointer border p-2 h-16 flex items-center justify-center rounded ${state.bingo[i] ? 'bg-pink-500 text-white' : 'bg-slate-100 text-slate-600'}">${v.replace('\\n','<br>')}</div>`).join(''); }
+        function resetBingo() { state.bingo=[]; saveState(); renderBingo(); }
+        function drawOmi() { const results = ['대길(大吉) - 오늘 쇼핑 득템!', '중길(中吉) - 웨이팅 없이 입장!', '소길(小吉) - 소소한 행복', '길(吉) - 맛있는 디저트 당첨', '흉(凶) - 돈키호테 사람 조심!']; const pick = results[Math.floor(Math.random() * results.length)]; document.getElementById('omiRes').innerText = pick.split(' - ')[0]; document.getElementById('omiText').innerText = pick.split(' - ')[1]; if(navigator.vibrate) navigator.vibrate(200); }
+
+        // 전역 함수 할당
+        window.toggleDarkMode = toggleDarkMode; window.switchTab = switchTab; window.toggleItin = toggleItin; window.toggleItinCheck = toggleItinCheck;
+        window.togglePartyMode = togglePartyMode; window.toggleGPS = toggleGPS; window.renderDB = renderDB; window.toggleTag = toggleTag; window.toggleFav = toggleFav;
+        window.openRouter = openRouter; window.toggleMapView = toggleMapView; window.toggleRoute = toggleRoute; window.copyText = copyText;
+        window.openBigText = openBigText; window.openModal = openModal; window.closeModal = closeModal; window.startBombGame = startBombGame;
+        window.saveTrainTime = saveTrainTime; window.showAllergyCard = showAllergyCard; window.hideAllergyCard = hideAllergyCard; window.fetchSunset = fetchSunset;
+        window.updateRates = updateRates; window.fetchRates = fetchRates; window.doCalc = doCalc; window.doNpay = doNpay; window.shareNpay = shareNpay;
+        window.checkTax = checkTax; window.saveSOS = saveSOS; window.sendSOS = sendSOS; window.saveMemo = saveMemo; window.setSuica = setSuica; window.addSuica = addSuica;
+        window.playTTS = playTTS; window.addSett = addSett; window.deleteSett = deleteSett; window.calcSett = calcSett; window.addExp = addExp; window.renderExp = renderExp;
+        window.resetBingo = resetBingo; window.drawOmi = drawOmi; window.exportToCSV = exportToCSV; window.findRestroom = findRestroom; window.state = state;
+        
+        // 추가된 동기화 전역 함수
+        window.addCartItem = addCartItem; window.toggleCartItem = toggleCartItem; window.deleteCartItem = deleteCartItem;
+        window.triggerGlobalRoulette = triggerGlobalRoulette; window.votePlace = votePlace; window.sendBroadcast = sendBroadcast;
+    </script>
+
+    <!-- 대용량 데이터베이스 (분리 없이 하단 배치) -->
+    <script id="tokyo-database">
+        const rawData = [
+            [0,"닝교초 이마한 (Ningyocho Imahan)","긴자","최상급 흑우 스키야키","10000엔~",35.6712,139.7665,"7/1100-2200/1500-1700"],
+            [0,"히츠마부시 빈초 (Hitsumabushi Bincho)","긴자","나고야식 장어덮밥","5000엔~",35.6712,139.7665,"7/1100-2130/1530-1700"],
+            [0,"가츠오 쇼쿠도 (Katsuo Shokudo)","시부야","가츠오 대패 덮밥","1500엔~",35.6580,139.7016,"1,2/0800-1300/none"],
+            [0,"d47 쇼쿠도 (d47 shokudo)","시부야","47개 지역 제철 정식","2000엔~",35.6580,139.7016,"7/1130-2000/1430-1800"],
+            [0,"오케이 (Okei)","이다바시","미슐랭 빕구르망 교자","1500엔~",35.7020,139.7450,"0/1130-2230/1350-1700"],
+            [0,"돈카츠 아오키 (Tonkatsu Aoki)","긴자","프리미엄 돈카츠","2000엔~",35.6712,139.7665,"0,1/1100-2000/1500-1700"],
+            [0,"스시 고바야시 (Sushi Kobayashi)","긴자 7초메","하이엔드 스시 오마카세","20000엔~",35.6712,139.7665,"0/1730-2230/none"],
+            [0,"야마다노 우나기 (Yamada No Unagi)","츠키지","가성비 장어덮밥","2000엔~",35.6654,139.7706,"0/1030-1500/none"],
+            [0,"호토 후도 (Hoto Fudo)","가와구치코","구름 모양 건물 호토멘","1500엔~",35.5020,138.7705,"7/1100-2000/none"],
+            [0,"코슈 호토 코사쿠 (Koshu Hoto Kosaku)","가와구치코","호박 호토멘 명가","1500엔~",35.5020,138.7705,"7/1100-2100/none"],
+            [0,"미우라 우동 (Miura Udon)","후지요시다","극강 쫄깃 요시다 우동","600엔~",35.4855,138.7995,"3/1000-1400/none"],
+            [0,"후지 텐푸라 이다텐 (Fuji Tempura Idaten)","가와구치코","후지산 모양 거대 텐동","1500엔~",35.5020,138.7705,"7/1100-2100/none"],
+            [0,"우나기 캇포 쿠로코 (Unagi Kappo Kuroko)","가와구치코","용천수 해감 장어덮밥","4500엔~",35.5020,138.7705,"2/1100-2000/1400-1700"],
+            [0,"야키니쿠 테츠진 (Yakiniku Tetsujin)","가와구치코","가성비 와규 야키니쿠","3500엔~",35.5020,138.7705,"3/1700-2300/none"],
+            [0,"하이 스피리츠 (High Spirits)","가와구치코","수제맥주 펍","2000엔~",35.5020,138.7705,"7/1700-2330/none"],
+            [0,"산로쿠엔 (Sanrokuen)","가와구치코","100년 가옥 이로리 꼬치","4000엔~",35.5020,138.7705,"4/1100-1900/none"],
+            [0,"야마보우시 (Yamaboushi)","가와구치코","무농약 채소 가정식","1500엔~",35.5020,138.7705,"3/1130-1500/none"],
+            [0,"츠지한 (Tsujihan)","니혼바시","카이센동 성지","오픈런",35.6830,139.7745,"7/1100-2100/none"],
+            [0,"카네코 한노스케 (Kaneko Hannosuke)","니혼바시","에도마에 텐동","1500엔~",35.6830,139.7745,"7/1100-2200/none"],
+            [0,"오가와 (Ogawa)","닝교초","1939년 창업 야키토리","1200엔~",35.6865,139.7820,"0,6/1100-1330/none"],
+            [0,"칸 아가리 (Kan Agari)","니시신주쿠","로바타야키, 생선구이","예약",35.6938,139.7034,"7/1700-2330/none"],
+            [0,"긴자 바이린 (Ginza Bairin)","긴자","돈카츠 원조","2500엔~",35.6712,139.7665,"7/1130-2045/none"],
+            [0,"돈카츠 야마베 (Tonkatsu Yamabe)","오카치마치","가성비 로스카츠","1000엔~",35.7075,139.7746,"7/1100-2100/1500-1700"],
+            [0,"긴자 카츠카미 2 (Ginza Katsukami 2)","긴자","미쉐린 코스형 돈카츠","8000엔~",35.6712,139.7665,"7/1130-2200/1400-1700"],
+            [0,"히키니쿠 토 코메 (Hikiniku to Kome)","시부야","숯불 함바그 3개","예약필수",35.6580,139.7016,"7/1100-2100/1500-1700"],
+            [0,"토리타케 (Toritake)","시부야","대중적인 야키토리","3000엔~",35.6580,139.7016,"7/1200-2330/none"],
+            [0,"다이와 스시 (Daiwa Sushi)","도요스","시장스시, 아침 방문","4000엔~",35.6455,139.7895,"0,3/0600-1300/none"],
+            [0,"스시 다이 (Sushi Dai)","도요스","도요스 시장스시의 왕","5000엔~",35.6455,139.7895,"0,3/0600-1400/none"],
+            [0,"긴자 큐베이 (Ginza Kyubey)","긴자","군함말이 발명지 런치","10000엔~",35.6712,139.7665,"0,1/1130-2200/1400-1700"],
+            [0,"미사키 총본점 (Misaki Sohonten)","닝교초","가성비 회전스시","2000엔~",35.6865,139.7820,"7/1100-2100/none"],
+            [0,"모헤지 (Moheji)","시부야","명란 치즈 몬자야키","3000엔~",35.6580,139.7016,"7/1100-2300/none"],
+            [0,"라멘 나기 (Ramen Nagi)","신주쿠","진한 멸치 육수 라멘","1200엔~",35.6938,139.7034,"7/0000-2359/none"],
+            [0,"도쿄 선플라워 (Tokyo Sunflower)","이다바시","아침 오픈 사누키 우동","800엔~",35.7020,139.7450,"0/0700-1500/none"],
+            [0,"류호 (Ryuho)","카구라자카","볶음밥 명가","1200엔~",35.7020,139.7395,"0/1100-2100/1500-1730"],
+            [0,"사마 커리 (Sama Curry)","하라주쿠","홋카이도식 스프커리","1500엔~",35.6686,139.7053,"3/1130-2130/1530-1700"],
+            [0,"타츠야 (Tatsuya)","신주쿠","현지인 찐 규동/토리동","800엔~",35.6938,139.7034,"7/1000-2200/none"],
+            [0,"교엔 로안 (Gyoen Roan)","신주쿠교엔","화로 생선구이 정식","1500엔~",35.6852,139.7100,"0/1130-2100/1400-1730"],
+            [0,"신주쿠 아카시아 (Shinjuku Acacia)","신주쿠","양배추롤 스튜","1100엔~",35.6938,139.7034,"7/1100-2200/none"],
+            [0,"마루고 (Marugo)","아키하바라","특로스카츠 노포","2500엔~",35.6983,139.7731,"1,2/1130-2000/1500-1700"],
+            [0,"이루카 도쿄 (Iruca Tokyo)","롯폰기","트러플 쇼유 라멘","1800엔~",35.6628,139.7328,"1/1100-2000/1500-1700"],
+            [0,"멘야 잇토 (Menya Itto)","신코이와","도쿄 츠케멘의 제왕","1500엔~",35.7169,139.8576,"7/1100-2100/1500-1800"],
+            [0,"오르간 (Organ)","니시오기쿠보","내추럴 와인 비스트로","6000엔~",35.7036,139.5998,"1,2/1700-2300/none"],
+            [0,"마와시 스시 카츠 (Mawashi Sushi Katsu)","메구로","가성비 회전초밥","2000엔~",35.6339,139.7156,"7/1100-2200/none"],
+            [0,"우오가시 니혼이치 (Uogashi Nihon-Ichi)","신바시","서서 먹는 타치구이 스시","1500엔~",35.6664,139.7583,"0/1100-2300/none"],
+            [0,"우메가오카 미도리 (Umegaoka Midori)","긴자","대왕 사이즈 초밥","3000엔~",35.6712,139.7665,"7/1100-2200/1500-1700"],
+            [0,"우구이스다니엔 (Uguisudanien)","우구이스다니","가성비 야키니쿠 정점","예약",35.7208,139.7783,"7/1700-0200/none"],
+            [0,"요로니쿠 (Yoroniku)","아오야마","초고급 프리미엄 야키니쿠","15000엔~",35.6653,139.7126,"7/1700-2300/none"],
+            [0,"쿠시와카마루 (Kushiwakamaru)","나카메구로","분위기 좋은 로컬 야키토리","3500엔~",35.6441,139.6990,"7/1700-2330/none"],
+            [0,"킷사 유 (Kissa You)","긴자","옛날식 오므라이스","1300엔~",35.6712,139.7665,"7/1100-1600/none"],
+            [0,"우동 마루카 (Udon Maruka)","진보초","도쿄 사누키 우동 1위","800엔~",35.6958,139.7578,"0/1100-1930/none"],
+            [0,"우오산 사카바 (Uosan Sakaba)","몬젠나카초","도쿄 3대 선술집","3000엔~",35.6718,139.7963,"0/1600-2130/none"],
+            [0,"시루베 (Shirube)","시모키타자와","활기찬 시루베 이자카야","4000엔~",35.6616,139.6668,"7/1730-2330/none"],
+            [0,"마사카 (Masaka)","시부야","비건 이자카야 마사카","3500엔~",35.6580,139.7016,"7/1200-2200/1500-1700"],
+            [0,"아카오니 (Akaoni)","산겐자야","니혼슈(사케) 성지","6000엔~",35.6435,139.6712,"7/1700-2330/none"],
+            [0,"사이키 (Saiki)","에비스","살얼음 사케 이자카야","6000엔~",35.6466,139.7101,"0/1700-2300/none"],
+            [0,"본디 (Bondy)","진보초","유러피안 카레 본디","1500엔~",35.6958,139.7578,"7/1100-2200/none"],
+            [0,"사보이 (SAVOY)","아자부주반","화덕 피자","2500엔~",35.6548,139.7360,"7/1130-2200/1500-1730"],
+            [0,"미즈 바이 산쿄다이 (Mizu by Sankyodai)","도쿄","해산물 오마카세","800엔~",35.6895,139.6917,"1/1200-2200/1500-1800"],
+            [0,"텐푸라 후나바시야 (Tempura Funabashiya)","신주쿠","점보 카키아게 덴뿌라","3000엔~",35.6938,139.7034,"7/1130-2200/none"],
+            [0,"뉴 토리긴 (New TORIGIN)","긴자","가마메시, 빈초탄 꼬치","2500엔~",35.6712,139.7665,"7/1130-2200/none"],
+            [0,"츄카 소바 치고노키 (Chuka Soba Chigonoki)","오치아이","순수 니보시 라멘","1000엔~",35.7115,139.6830,"7/1100-1500/none"],
+            [0,"잇푸쿠 (Ippuku)","신주쿠교엔","미슐랭 조개육수 라멘","1100엔~",35.6852,139.7100,"7/1100-2100/1500-1800"],
+            [0,"라미띠에 (L'Amitie)","타카다노바바","프랑스식 비스트로","3000엔~",35.7128,139.7039,"1/1200-2200/1400-1800"],
+            [0,"츠키노야마 (Tsukinoyama)","요츠야","죽순 튀김과 소바","1500엔~",35.6860,139.7180,"0/1130-2100/1400-1730"],
+            [0,"에도 소바 아사다 (Edo Soba Asada)","아사쿠사바시","아나고 튀김 소바","2000엔~",35.6974,139.7865,"0/1130-2100/1430-1730"],
+            [0,"쿄라쿠테이 (Kyo-rakutei)","카구라자카","빕구르망 덴푸라/소바","2500엔~",35.7020,139.7395,"0/1130-2100/1500-1700"],
+            [0,"타마와라이 (Tamawarai)","오모테산도","1스타 메밀 소바","3000엔~",35.6686,139.7053,"1/1130-2000/1500-1730"],
+            [0,"만텐 스시 (Manten Sushi)","마루노우치","가성비 오마카세","예약",35.6812,139.7671,"7/1100-2200/1500-1700"],
+            [0,"타치구이 스시 아키라 (Tachigui Sushi Akira)","신바시","서서 먹는 고급 스시","4000엔~",35.6664,139.7583,"0/1130-2200/1400-1700"],
+            [0,"호르몬 마사루 (Hormone Masaru)","미타","점심 야키니쿠 정식","1500엔~",35.6492,139.7478,"7/1130-2300/1400-1700"],
+            [0,"스타미나엔 (Stamina-en)","시키네","야키니쿠 매니아 성지","6000엔~",35.7650,139.7820,"2,3/1700-2230/none"],
+            [0,"토리타마 (Toritama)","시로카네","희귀 특수부위 야키토리","6000엔~",35.6436,139.7247,"0/1700-2330/none"],
+            [0,"후쿠 (Fuku)","요요기우에하라","미슐랭 야키토리 후쿠","4000엔~",35.6690,139.6795,"0/1730-2300/none"],
+            [0,"토리키 (Toriki)","킨시초","야키토리 토리키","5000엔~",35.6966,139.8142,"0/1700-2300/none"],
+            [0,"키지 (Kiji)","마루노우치","오사카 원조 오코노미야키","2000엔~",35.6812,139.7671,"7/1100-2200/1500-1700"],
+            [0,"타니야 (Taniya)","스이텐구마에","자가제면 수타 우동","1500엔~",35.6835,139.7845,"7/1100-2200/1500-1800"],
+            [0,"멘치라시 (Menchirashi)","하라주쿠","힙스터 우동 멘치라시","1200엔~",35.6686,139.7053,"0/1130-2200/none"],
+            [0,"묘진마루 (Myojinmaru)","니시신주쿠","짚불 가츠오 타타키","4000엔~",35.6938,139.7034,"7/1130-2300/1400-1700"],
+            [0,"키시다야 (Kishidaya)","츠키시마","소내장 조림 키시다야","3000엔~",35.6644,139.7828,"0,1/1700-2130/none"],
+            [0,"노크 (KNOCK)","롯폰기","캐주얼 파스타 전문점","2000엔~",35.6628,139.7328,"7/1130-2230/1500-1730"],
+            [0,"레갈로 (REGALO)","산구바시","미슐랭 1스타 이탈리안","2500엔~",35.6800,139.6910,"1/1130-2200/1430-1800"],
+            [0,"우나젠 (Unazen)","혼조아즈마바시","우나젠 장어","4500엔~",35.7061,139.8000,"1/1100-2000/1430-1700"],
+            [0,"류노미야코 (Ryu no Miyako)","이케부쿠로","본격 사천요리","2000엔~",35.7295,139.7109,"7/1100-2330/none"],
+            [0,"아지보 (Ajibo)","칸다","양고기 볶음 중식","4000엔~",35.6922,139.7699,"0/1700-2300/none"],
+            [0,"사무라이 (SAMURAI)","시모키타자와","야채 듬뿍 스프카레","1600엔~",35.6616,139.6668,"7/1130-2130/1530-1730"],
+            [0,"토마토 (Tomato)","오기쿠보","비싼데 줄 서는 카레","2800엔~",35.7045,139.6199,"3,4/1130-2030/1330-1830"],
+            [0,"요시다 커리 (Yoshida Curry)","오기쿠보","키마 카레 명점","2000엔~",35.7045,139.6199,"0,1,3,4/1130-2000/1400-1730"],
+            [0,"키츠네야 (Kitsuneya)","츠키지","호르몬동 키츠네야","1200엔~",35.6654,139.7706,"0,3/0630-1330/none"],
+            [0,"텐동 마사루 (Tendon Masaru)","아사쿠사","텐동 마사루","2500엔~",35.7147,139.7966,"3,4/1100-1400/none"],
+            [0,"텐푸라 메시 카네코 (Tempura Meshi Kaneko)","니혼바시","아나고 튀김 정식","1500엔~",35.6830,139.7745,"7/1100-2100/none"],
+            [0,"텐푸라 아베 (Tempura Abe)","긴자","덴푸라 아베 런치 텐동","1500엔~",35.6712,139.7665,"7/1130-2100/1400-1700"],
+            [0,"피에스티 (PST)","히가시아자부","피자 스튜디오 타마키","3000엔~",35.6548,139.7360,"7/1700-2300/none"],
+            [0,"카이카야 (Kaikaya)","시부야","해산물 이자카야","500엔~",35.6580,139.7016,"7/1130-2300/1400-1800"],
+            [0,"암스 (ARMS)","요요기공원","암스 수제버거","1500엔~",35.6690,139.6795,"1/1100-2100/none"],
+            [0,"파이어 하우스 (Fire House)","혼고산초메","수제버거 파이어하우스","1800엔~",35.7088,139.7601,"7/1100-2130/none"],
+            [0,"네보케 (Neboke)","아카사카","가츠오 타타키 코스","6000엔~",35.6733,139.7375,"7/1130-2200/1430-1700"],
+            [0,"이마카츠 (Imakatsu)","롯폰기","이마카츠 사사미카츠","2000엔~",35.6628,139.7328,"0/1130-2200/1600-1800"],
+            [0,"규카츠 이로하 (Gyukatsu Iroha)","이케부쿠로","규카츠 이로하","1500엔~",35.7295,139.7109,"7/1100-2200/none"],
+            [0,"와라야키야 (Warayakiya)","롯폰기","와라야키야 볏짚 구이","4000엔~",35.6628,139.7328,"7/1700-2330/none"],
+            [0,"산토라 (Santora)","에도가와바시","산토라 미소라멘","1000엔~",35.7080,139.7320,"7/1100-2100/1500-1730"],
+            [0,"우오타니 (Uotani)","에도가와바시","우오타니 폭탄 낫토","1000엔~",35.7080,139.7320,"0/1130-2230/1400-1730"],
+            [0,"칸다 마츠야 (Kanda Matsuya)","아와지초","140년 메밀소바 마츠야","1000엔~",35.6960,139.7680,"0/1100-2000/none"],
+            [0,"도쿄 시바 토후야 우카이 (Tokyo Shiba Tofuya Ukai)","시바공원","두부 가이세키","15000엔~",35.6585,139.7454,"1/1130-2200/1500-1700"],
+            [0,"키소지 (Kisoji)","신주쿠","키소지 샤브샤브 코스","2500엔~",35.6938,139.7034,"7/1130-2130/1500-1700"],
+            [0,"마이센 (Maisen)","아오야마","마이센 본점 돈카츠","2000엔~",35.6653,139.7126,"7/1100-2100/none"],
+            [0,"사토 요스케 (Sato Yosuke)","긴자","이나니와 우동 사토 요스케","1500엔~",35.6712,139.7665,"7/1130-2100/1500-1700"],
+            [0,"미마스야 (Mimasuya)","칸다","최고 노포 이자카야","3000엔~",35.6922,139.7699,"0/1700-2230/none"],
+            [0,"돈카츠 톤타 (Tonkatsu Tonta)","타카다노바바","돈카츠 톤타","2000엔~",35.7128,139.7039,"0,4/1130-2030/1330-1700"],
+            [0,"오타후쿠 (Otafuku)","아사쿠사","아사쿠사 전통 오뎅","400엔~",35.7147,139.7966,"1/1700-2300/none"],
+            [0,"그릴 그랜드 (Grill Grand)","아사쿠사","데미글라스 오므라이스","2500엔~",35.7147,139.7966,"0,1/1130-2030/1400-1700"],
+            [0,"아사쿠사 무기토로 (Asakusa Mugitoro)","아사쿠사","마 갈아만든 요리","3000엔~",35.7147,139.7966,"7/1100-2100/1500-1700"],
+            [0,"노다이와 (Nodaiwa)","아자부이쿠라","미슐랭 장어 노다이와","6000엔~",35.6548,139.7360,"0/1100-2000/1330-1700"],
+            [0,"돈카츠 스기타 (Tonkatsu Sugita)","쿠라마에","돈카츠 스기타","3000엔~",35.7034,139.7905,"4/1130-2000/1400-1700"],
+            [0,"캇포 나카지마 (Kappo Nakajima)","신주쿠","정어리 요리 전문","1500엔~",35.6938,139.7034,"0/1130-2100/1400-1730"],
+            [0,"마구로 토 샤리 (Maguro to Shari)","시부야","참치덮밥 마구로토 샤리","2000엔~",35.6580,139.7016,"7/1100-2100/none"],
+            [0,"마구로 시라카와 (Maguro Shirakawa)","우메지마","두툼한 참치","3000엔~",35.7600,139.8000,"7/1130-2000/1400-1700"],
+            [0,"세이겐 (Seigen)","츠키지","해현 시겐 참치덮밥","3800엔~",35.6654,139.7706,"0/0800-1400/none"],
+            [0,"츠키지 스시 야마하루 (Tsukiji Sushi Yamaharu)","츠키지","스시 야마하루","10000엔~",35.6654,139.7706,"0/1000-2100/none"],
+            [0,"스시 미야비 (Sushi Miyabi)","츠키지","스시 미야비 오마카세","20000엔~",35.6654,139.7706,"0/1100-2200/1500-1700"],
+            [0,"스시 잇신 (Sushi Isshin)","유시마","스시 잇신 오마카세","20000엔~",35.7080,139.7680,"0/1700-2300/none"],
+            [0,"신바시 츠루하치 (Shinbashi Tsuruhachi)","신바시","신바시 츠루하치 스시","30000엔~",35.6664,139.7583,"0/1700-2200/none"],
+            [0,"쇼군 버거 (SHOGUN BURGER)","신주쿠","와규 100% 쇼군 버거","2000엔~",35.6938,139.7034,"7/1130-2200/none"],
+            [0,"돈카츠 톤파치테이 (Tonkatsu Tonpachitei)","우에노","미슐랭 톤파치테이","2000엔~",35.7115,139.7770,"1/1130-2000/1430-1700"],
+            [0,"신바시 토키소바 (Shinbashi Tokisoba)","시바다이몬","쥬와리 소바 토키소바","1000엔~",35.6664,139.7583,"0/1130-2100/1400-1730"],
+            [0, "Tonkatsu Keita (돈카츠 케이타)", "니시오기쿠보", "가고시마 흑돼지 프리미엄 돈카츠", "2500엔~", 35.7118, 139.7975, "1/1100-2000/1500-1700"],
+            [0, "Ponchi-ken (폰치켄)", "오가와마치", "미쉐린 빕구르망 돈카츠", "2500엔~", 35.6953, 139.7634, "0/1100-2000/1500-1730"],
+            [0, "Menya Kaijin (멘야 카이진)", "신주쿠", "맑은 해산물 육수 라멘", "1000엔~", 35.6896, 139.7018, "7/1100-2300/1500-1630"],
+            [0, "Bar Trench (바 트렌치)", "에비스", "아시아 베스트 바 50", "3000엔~", 35.6461, 139.7093, "7/1800-0200/none"],
+            [0, "PATH (패스)", "요요기공원", "더치 팬케이크와 내추럴 와인", "3000엔~", 35.6698, 139.6800, "1/0800-2100/1500-1800"],
+            [0, "Rengatei (렌가테이)", "긴자", "돈카츠와 오므라이스의 원조", "2000엔~", 35.6720, 139.7659, "0/1100-2100/1500-1700"],
+            [0, "Sanuki Udon Johe (사누키우동 죠헤)", "요요기", "수타 사누키 우동 전문점", "1000엔~", 35.6825, 139.7001, "0/1100-2000/1500-1700"],
+            [0, "Daiwa Suisan (대와 수산)", "도요스", "신선한 시장 참치와 스시", "4000엔~", 35.6458, 139.7891, "0,3/0600-1300/none"],
+            [0, "Sushi Yoshio (鮨 芳尾)", "긴자", "고급 에도마에 스시 오마카세", "20000엔~", 35.6705, 139.7650, "0/1700-2200/none"],
+            [0, "야키니쿠 쇼타이엔 (Yakiniku Syoutaien)", "시바다이몬", "입에서 녹는 야키스키", "6000엔~", 35.6575, 139.7535, "7/1700-2330/none"],
+            [0, "바조쿠 라멘 (Bazoku Ramen)", "아사쿠사", "매콤한 마파두부 수타면", "1000엔~", 35.7100, 139.7960, "7/1130-2030/none"],
+            [0, "긴자 테이 (Ginza Tei)", "긴자", "새벽까지 하는 볶음밥 맛집", "1100엔~", 35.6715, 139.7660, "7/1130-0200/none"],
+            [0, "히가시야마 스튜디오 (Higashiyama Studio)", "메구로", "미감이 돋보이는 모던 다이닝", "8000엔~", 35.6465, 139.6990, "0/1800-2300/none"],
+            [0, "스테이크보울 (Steak Bowl)", "니시신주쿠", "부드러운 소고기 스테이크 덮밥", "1500엔~", 35.6940, 139.6980, "7/1130-2200/none"],
+            [0, "치리하마 본점 (Chirihama Honten)", "쓰키지", "가성비 사시미 정식과 해산물 나베", "1000엔~", 35.6670, 139.7710, "0/1100-2230/1400-1700"],
+            [1,"앤 더 프리엣 (And The Friet)","히로오","벨기에식 감자튀김","600엔~",35.6534,139.7225,"7/1100-2000/none"],
+            [1,"다이와 (Daiwa)","나카메구로","생과일 샌드위치","800엔~",35.6441,139.6990,"1/1000-1700/none"],
+            [1,"센비키야 (Sembikiya)","긴자","최상급 머스크 멜론 파르페","3000엔~",35.6712,139.7665,"7/1100-2000/none"],
+            [1,"미즈호 (Mizuho)","하라주쿠","도쿄 3대 마메다이후쿠","300엔~",35.6686,139.7053,"0/0900-1500/none"],
+            [1,"야나기야 (Yanagiya)","닝교초","도쿄 3대 타이야키","200엔~",35.6865,139.7820,"0/1230-1800/none"],
+            [1,"센트레 더 베이커리 (Centre The Bakery)","긴자","식빵계 에르메스","1500엔~",35.6712,139.7665,"7/1000-1900/none"],
+            [1,"레이크 베이크 (Lake Bake)","가와구치코","후지산 뷰 천연효모 빵집","1000엔~",35.5020,138.7705,"3/1000-1630/none"],
+            [1,"펠리칸 빵집 (Pelican Bread)","아사쿠사","80년 전통 식빵","예약",35.7147,139.7966,"0/0800-1700/none"],
+            [1,"소금빵 메종 (Salt Bread Maison)","긴자","소금빵 원조","100엔~",35.6712,139.7665,"7/0830-1900/none"],
+            [1,"카페 드 람브르 (Cafe de L'Ambre)","긴자","70년 에이징 원두 커피","1000엔~",35.6712,139.7665,"7/1200-2100/none"],
+            [1,"푸글렌 (Fuglen)","요요기","북유럽 감성 카페","600엔~",35.6690,139.6795,"7/0700-2200/none"],
+            [1,"글리치 커피 (Glitch Coffee)","진보초","스페셜티 커피","800엔~",35.6958,139.7578,"7/0800-1900/none"],
+            [1,"군린도 (Gunrindo)","도쿄","미슐랭 화과자 명소","500엔~",35.7040,139.7280,"0/0930-1700/none"],
+            [1,"카메쥬 (Kameju)","아사쿠사","팬케이크 피 도라야키","1000엔~",35.7147,139.7966,"7/1000-1900/none"],
+            [1,"블루보틀 도요스 (Blue Bottle Toyosu)","도요스","공원 뷰 블루보틀","600엔~",35.6455,139.7895,"7/0800-1900/none"],
+            [1,"스즈키엔 (Suzukien)","아사쿠사","단계별 말차 젤라또","500엔~",35.7147,139.7966,"7/1100-1700/none"],
+            [1,"나카무라 토키치 (Nakamura Tokichi)","긴자","생말차 디저트","1500엔~",35.6712,139.7665,"7/1030-2030/none"],
+            [1,"아마노야 (Amanoya)","아자부주반","타마고산도","1200엔~",35.6548,139.7360,"2/1200-2100/none"],
+            [1,"피에르 마르콜리니 (Pierre Marcolini)","긴자","초콜릿 아이스크림","800엔~",35.6712,139.7665,"7/1100-2000/none"],
+            [1,"하브스 (HARBS)","신주쿠","과일 밀크레이프","1000엔~",35.6938,139.7034,"7/1100-2000/none"],
+            [1,"아사코 이와야나기 (Asako Iwayanagi)","토도로키","하이엔드 과일 파르페","4000엔~",35.6040,139.6460,"1,2/1000-1800/none"],
+            [1,"토라야 (Toraya)","도쿄역","프리미엄 양갱 토라야","1500엔~",35.6812,139.7671,"7/1000-2000/none"],
+            [1,"후지산 식빵 (Fujisan Shokupan)","가와구치코","단면 후지산 식빵","800엔~",35.5020,138.7705,"4/1100-1800/none"],
+            [1,"우사기야 (Usagiya)","우에노","전설적인 도라야키 (예약)","240엔~",35.7115,139.7770,"3/0900-1600/none"],
+            [1,"쵸시야 (Choushiya)","긴자","정육점표 햄카츠 샌드위치","400엔~",35.6712,139.7665,"0,1/1100-1800/1400-1600"],
+            [1,"카시야 시노노메 (Kashiya Shinonome)","쿠라마에","선물용 구움과자","1000엔~",35.7034,139.7905,"7/1200-1830/none"],
+            [1,"긴자 츠보야키이모 (Ginza Tsuboyaki-imo)","긴자","구운 달콤한 군고구마","800엔~",35.6712,139.7665,"7/1200-2200/none"],
+            [1,"커피 라이츠 (Coffee Wrights)","쿠라마에","로스터리 카페","600엔~",35.7034,139.7905,"1/1000-1730/none"],
+            [1,"킷사 한게츠 (Kissa Hangetsu)","쿠라마에","시크한 감성과 디저트","1000엔~",35.7034,139.7905,"3/1200-1900/none"],
+            [1,"마메 (Mame)","미나미아오야마","부드러운 콩떡","300엔~",35.6653,139.7126,"0,1/1000-1800/none"],
+            [1,"스즈카케 (Suzukake)","히비야","딸기 찹쌀떡","500엔~",35.6735,139.7600,"7/1100-2000/none"],
+            [1,"오이와케 당고 (Oiwake Dango)","신주쿠","쫄깃한 떡꼬치","300엔~",35.6938,139.7034,"7/1000-2030/none"],
+            [1,"히구마 도넛 (Higuma Doughnuts)","오모테산도","수제 도넛","400엔~",35.6686,139.7053,"2/1100-1800/none"],
+            [1,"노와 드 뵈르 (Noix de Beurre)","신주쿠","이세탄 갓 구운 피낭시에","400엔~",35.6938,139.7034,"7/1000-2000/none"],
+            [1,"잇푸쿠 & 마차 (IPPUKU & MATCHA)","니혼바시","마차 디저트","1000엔~",35.6830,139.7745,"7/1000-2000/none"],
+            [1,"브리콜라주 브레드 (Bricolage Bread)","롯폰기","브리콜라주 빵집","500엔~",35.6628,139.7328,"1/0800-1900/none"],
+            [1,"키무라야 (Kimuraya)","긴자","단팥빵 원조 본점","1000엔~",35.6712,139.7665,"7/1000-2000/none"],
+            [1,"365일 (365 Nichi)","요요기공원","초코크런치 볼 빵","400엔~",35.6690,139.6795,"7/0700-1900/none"],
+            [1,"카멜백 (Camelback)","요요기","계란 샌드위치","500엔~",35.6690,139.6795,"1/0800-1700/none"],
+            [1,"마츠노스케 뉴욕 (Matsunosuke N.Y.)","다이칸야마","클래식 애플파이","600엔~",35.6480,139.7030,"7/0900-1800/none"],
+            [1,"네즈 카페 (Nezu Cafe)","아오야마","미술관 내 정원 뷰 카페","1200엔~",35.6653,139.7126,"1/1000-1630/none"],
+            [1,"카페 파울리스타 (Cafe Paulista)","긴자","비틀즈 방문 카페","1000엔~",35.6712,139.7665,"7/0900-2000/none"],
+            [1,"히이라기 긴자 (HIIRAGI Ginza)","긴자","말차 빙수","3000엔~",35.6712,139.7665,"7/1100-1900/none"],
+            [1,"긴자 후쿠로쿠쥬 (Ginza Fukurokuju)","긴자","후쿠로쿠쥬 빙수","1000엔~",35.6712,139.7665,"7/1100-1900/none"],
+            [1,"르빵 프랑스 세키구치 (Le Pain France Sekiguchi)","에도가와바시","바게트","1000엔~",35.7080,139.7320,"7/0800-1800/none"],
+            [1,"넘버 슈가 (Number Sugar)","오모테산도","수제 카라멜","1200엔~",35.6686,139.7053,"7/1100-1900/none"],
+            [1,"에글 두스 (Aigre Douce)","메지로","최고의 파티세리","800엔~",35.7210,139.7060,"1,2/1100-1700/none"],
+            [1,"챠테이 하토우 (Chatei Hatou)","시부야","쉬폰케이크와 드립","1200엔~",35.6580,139.7016,"7/1100-2300/none"],
+            [1,"웨스트 아오야마 가든 (West Aoyama Garden)","아오야마","폭신한 팬케이크","2000엔~",35.6653,139.7126,"7/1100-2000/none"],
+            [1,"프레스 버터 샌드 (Press Butter Sand)","도쿄역","버터 샌드","1000엔~",35.6812,139.7671,"7/0900-2100/none"],
+            [1,"비론 (VIRON)","시부야","바게트와 크레페","1000엔~",35.6580,139.7016,"7/0900-2100/none"],
+            [1,"니혼바시 나가토 (Nihonbashi Nagato)","니혼바시","전통 쿠즈모치","1000엔~",35.6830,139.7745,"0/1000-1800/none"],
+            [1,"에이타로 총본포 (Eitaro Sohonpo)","니혼바시","화과자 총본포","1000엔~",35.6830,139.7745,"0/1000-1800/none"],
+            [1,"시스코 커피 (CISCO Coffee)","가와구치코","샌프란시스코풍 커피","1000엔~",35.5020,138.7705,"3/0930-1700/none"],
+            [1, "카페앤바 포피 (Cafe & bar Poppy)", "아사쿠사", "40년 전통 레트로 킷사텐 나폴리탄", "1000엔~", 35.7125, 139.7940, "6/0900-1800/none"],
+            [1, "펠리칸 카페 (Pelican Cafe)", "아사쿠사", "펠리칸 식빵으로 만든 버터 토스트", "1000엔~", 35.7115, 139.7925, "0,3/0900-1730/none"],
+            [1, "Sakurai Tea Experience", "오모테산도", "현대적인 일본 차 오마카세", "5000엔~", 35.6628, 139.7138, "7/1100-2000/none"],
+            [1, "Naniwaya Sohonten (나니와야 소혼텐)", "아자부주반", "원조 타이야키 (붕어빵) 명가", "200엔~", 35.6545, 139.7350, "1/1100-1900/none"],
+            [2,"도쿄역 (Tokyo Station)","도쿄역","적벽돌 역사 야경","무료",35.6812,139.7671,"7/0000-2359/none"],
+            [2,"우에노 공원 (Ueno Park)","우에노","국립박물관 문화 중심","무료",35.7115,139.7770,"7/0500-2300/none"],
+            [2,"신주쿠 교엔 (Shinjuku Gyoen)","신주쿠","도심 겹벚꽃 정원","500엔",35.6852,139.7100,"1/0900-1600/none"],
+            [2,"도쿄 디즈니랜드 (Tokyo Disneyland)","마이하마","글로벌 테마파크","예약",35.6329,139.8804,"7/0900-2100/none"],
+            [2,"롯폰기 힐즈 (Roppongi Hills)","롯폰기","시티뷰 전망대","2000엔~",35.6628,139.7328,"7/1000-2200/none"],
+            [2,"오이시 공원 (Oishi Park)","가와구치코","네모필라 포토존","무료",35.5220,138.7450,"7/0000-2359/none"],
+            [2,"아라쿠라야마 센겐 (Arakurayama Sengen)","후지요시다","후지산 5층 탑 엽서","무료",35.4980,138.8020,"7/0000-2359/none"],
+            [2,"네즈 미술관 (Nezu Museum)","아오야마","일본식 정원 및 미술","1300엔",35.6653,139.7126,"1/1000-1700/none"],
+            [2,"센소지 (Senso-ji)","아사쿠사","도쿄 최고 사찰","무료",35.7147,139.7966,"7/0600-1700/none"],
+            [2,"아트 아쿠아리움 (Art Aquarium)","긴자","금붕어 미디어아트","2500엔",35.6712,139.7665,"7/1000-1900/none"],
+            [2,"팀랩 보더리스 (TeamLab Borderless)","아자부다이","몰입형 미디어아트","3800엔~",35.6620,139.7400,"7/1000-2100/none"],
+            [2,"지브리 미술관 (Ghibli Museum)","미타카","지브리 미술관","예약",35.6960,139.5700,"2/1000-1800/none"],
+            [2,"미야시타 파크 (Miyashita Park)","시부야","옥상 공원 핫플","무료",35.6580,139.7016,"7/0800-2300/none"],
+            [2,"시부야 스크램블 스퀘어 (Shibuya Scramble Square)","시부야","스크램블 교차로 전망대","2500엔",35.6580,139.7016,"7/1000-2230/none"],
+            [2,"도쿄 타워 (Tokyo Tower)","미나토","도쿄 영원한 상징","1200엔~",35.6585,139.7454,"7/0900-2230/none"],
+            [2,"워너 브라더스 투어 (Warner Bros. Tour)","토시마엔","해리포터 스튜디오","6500엔",35.7410,139.6460,"7/0830-2200/none"],
+            [2,"로손 가와구치코 (Lawson Kawaguchiko)","가와구치코","후지산 배경 편의점","무료",35.5000,138.7660,"7/0000-2359/none"],
+            [2,"나카메구로 메구로강 (Nakameguro Meguro River)","나카메구로","강변 녹음 산책로","무료",35.6441,139.6990,"7/0000-2359/none"],
+            [2,"오다이바 & 유니콘 건담 (Odaiba & Unicorn Gundam)","오다이바","실물 크기 건담","무료",35.6248,139.7731,"7/0000-2359/none"],
+            [2,"후지산 로프웨이 (Mt. Fuji Ropeway)","가와구치코","후지산 전체 조망","1000엔",35.5030,138.7680,"7/0930-1600/none"],
+            [2,"오시노 핫카이 (Oshino Hakkai)","오시노촌","후지산 만년설 연못","무료",35.4600,138.8320,"7/0000-2359/none"],
+            [2,"트렁크 호텔 (TRUNK HOTEL)","요요기","부티크 호텔 라운지","음료",35.6690,139.6795,"7/0700-2300/none"],
+            [2,"쉐어 라운지 (SHARE LOUNGE)","마루노우치","츠타야 라운지","유료",35.6812,139.7671,"7/0800-2200/none"],
+            [2,"이노카시라 공원 (Inokashira Park)","키치죠지","오리배와 산책","무료",35.7000,139.5750,"7/0000-2359/none"],
+            [2,"요요기 공원 (Yoyogi Park)","시부야","시민들의 거대한 휴식처","무료",35.6690,139.6795,"7/0000-2359/none"],
+            [2,"다이칸야마 티사이트 (Daikanyama T-Site)","다이칸야마","츠타야 서점 거리","무료",35.6480,139.7030,"7/0900-2200/none"],
+            [2,"야나카 긴자 (Yanaka Ginza)","닛포리","에도 정취 고양이 마을","무료",35.7270,139.7670,"7/1000-1800/none"],
+            [2,"아자부다이 힐즈 (Azabudai Hills)","카미야초","도쿄 최고층 빌딩 전망대","무료",35.6620,139.7400,"7/1000-2100/none"],
+            [2,"긴자 보행자 천국 (Ginza Pedestrian)","긴자","주말 보행자 천국","무료",35.6712,139.7665,"1,2,3,4,5/1200-1800/none"],
+            [2,"갓파바시 도구거리 (Kappabashi)","아사쿠사","칼 전문 갓파바시 거리","무료",35.7147,139.7966,"7/1000-1700/none"],
+            [2,"아키하바라 (Akihabara)","아키하바라","전자상가 서브컬처","무료",35.6983,139.7731,"7/1000-2000/none"],
+            [2,"하라주쿠 다케시타 거리 (Harajuku Takeshita)","하라주쿠","다케시타 도리","무료",35.6686,139.7053,"7/1000-2000/none"],
+            [2,"츠키지 장외시장 (Tsukiji Outer Market)","츠키지","해산물 장외시장","무료",35.6654,139.7706,"0,3/0700-1400/none"],
+            [2,"도쿄 스카이트리 (Tokyo Skytree)","오시아게","일본 최고 높이 전망대","2100엔~",35.7100,139.8107,"7/1000-2100/none"],
+            [2,"메이지 신궁 (Meiji Jingu)","하라주쿠","거대한 숲 메이지 신궁","무료",35.6763,139.6993,"7/0500-1800/none"],
+            [2,"후지큐 하이랜드 (Fuji-Q Highland)","가와구치코","절규 머신 놀이공원","입장무료",35.4860,138.7800,"7/0900-1700/none"],
+            [2,"사이코 이야시노사토 (Saiko Iyashi-no-Sato)","사이코","초가 지붕 마을","500엔",35.5020,138.7705,"7/0900-1700/none"],
+            [2,"리쿠기엔 (Rikugien)","고마고메","다이묘 정원","300엔",35.7330,139.7460,"7/0900-1700/none"],
+            [2,"고이시카와 고라쿠엔 (Koishikawa Korakuen)","이이다바시","고이시카와 고라쿠엔","300엔",35.7050,139.7480,"7/0900-1700/none"],
+            [2,"하마리큐 은사정원 (Hama-rikyu Gardens)","시오도메","하마리큐 은사정원","300엔",35.6600,139.7630,"7/0900-1700/none"],
+            [2,"아메요코 (Ameyoko)","우에노","전통 시장 아메요코","무료",35.7115,139.7770,"7/1000-2000/none"],
+            [2, "Toyosu Senkyaku Banrai (토요스 센캬쿠 반라이)", "도요스", "에도 시대풍 온천 및 상업 시설", "무료(온천별도)", 35.6450, 139.7850, "7/1000-2200/none"],
+            [2, "Tokyo DisneySea (도쿄 디즈니씨)", "마이하마", "전 세계 유일의 디즈니씨", "8400엔~", 35.6267, 139.8851, "7/0900-2100/none"],
+            [3,"르메르 (Lemaire)","에비스","미니멀 의류 범백","단독매장",35.6466,139.7101,"7/1100-2000/none"],
+            [3,"요도바시 카메라 (Yodobashi Camera)","아키하바라","포터 가방 및 이어폰","할인",35.6983,139.7731,"7/0930-2200/none"],
+            [3,"빅카메라 (Bic Camera)","이케부쿠로","삼성 T9 SSD, 위스키","쿠폰",35.7295,139.7109,"7/1000-2200/none"],
+            [3,"이토야 (Itoya)","긴자","12층 프리미엄 문구","문구덕후",35.6712,139.7665,"7/1000-2000/none"],
+            [3,"키디랜드 (Kiddyland)","하라주쿠","치이카와 굿즈","인형",35.6686,139.7053,"7/1100-2000/none"],
+            [3,"이세탄 신주쿠 (Isetan Shinjuku)","신주쿠","일본 최고 매출 백화점","5%할인",35.6938,139.7034,"7/1000-2000/none"],
+            [3,"메가 돈키호테 (Mega Don Quijote)","시부야","최대 메가 돈키호테","아침쾌적",35.6580,139.7016,"7/0000-2359/none"],
+            [3,"스탠다드 프로덕츠 (Standard Products)","시부야","다이소 고급화","가성비",35.6580,139.7016,"7/0930-2100/none"],
+            [3,"크롬하츠 (Chrome Hearts)","아오야마","플래그십 스토어","오픈런",35.6653,139.7126,"7/1200-2000/none"],
+            [3,"닌텐도 & 포켓몬 (Nintendo & Pokemon)","시부야","파르코 굿즈성지","쇼핑",35.6580,139.7016,"7/1100-2100/none"],
+            [3,"시모키타자와 (Shimokitazawa)","시모키타자와","빈티지 구제거리","보물찾기",35.6616,139.6668,"7/1100-2000/none"],
+            [3,"도버 스트릿 마켓 (Dover Street Market)","긴자","스트릿 편집숍","발매일 대기",35.6712,139.7665,"7/1100-2000/none"],
+            [3,"도구점 노보리 (Tool Shop Nobori)","쿠라마에","주방/리빙 도구점","30끼",35.7034,139.7905,"7/1100-1800/none"],
+            [3,"아코메야 도쿄 (AKOMEYA TOKYO)","카구라자카","쌀 핸드크림","선물용",35.7020,139.7395,"7/1100-2000/none"],
+            [3,"무인양품 긴자 (MUJI Ginza)","긴자","무인양품 플래그십","생활용품",35.6712,139.7665,"7/1100-2100/none"],
+            [3,"아포테케 프래그런스 (APFR TOKYO)","키타자와","인센스","향기쇼핑",35.6610,139.6680,"7/1100-2000/none"],
+            [3,"야에카 홈 스토어 (YAECA HOME STORE)","시로카네","라이프스타일","고급잡화",35.6436,139.7247,"1/1200-2000/none"],
+            [3,"키테 마루노우치 (KITTE Marunouchi)","도쿄역","전통 공예품","기념품",35.6812,139.7671,"7/1100-2000/none"],
+            [3,"지유 마로니에 (GU Marronnier)","긴자","초대형 GU 매장","가성비패션",35.6712,139.7665,"7/1100-2100/none"],
+            [3,"타케야 (Takeya)","오카치마치","타케야 보라색 마트","대량쇼핑",35.7075,139.7746,"7/0900-2100/none"],
+            [3,"로프트 (LOFT)","시부야","종합 빌딩","구경",35.6580,139.7016,"7/1100-2100/none"],
+            [3,"다이소 마로니에 (Daiso Marronnier)","긴자","세계 최대급 다이소","100엔샵",35.6712,139.7665,"7/1100-2100/none"],
+            [3,"마츠모토 키요시 (Matsumoto Kiyoshi)","시부야","드럭스토어","돈키대안",35.6580,139.7016,"7/0900-2230/none"],
+            [3,"스투시 (Stussy)","하라주쿠","스투시 챕터","도쿄한정판",35.6686,139.7053,"7/1100-2000/none"],
+            [3,"앳코스메 도쿄 (@cosme Tokyo)","하라주쿠","코스메틱 매장","화장품",35.6686,139.7053,"7/1100-2100/none"],
+            [3,"오니츠카 타이거 (Onitsuka Tiger)","오모테산도","닛폰메이드","신발",35.6686,139.7053,"7/1100-2000/none"],
+            [3,"스노우피크 (Snow Peak)","오모테산도","캠핑용품","티타늄컵",35.6686,139.7053,"7/1100-2000/none"],
+            [3,"빔즈 (BEAMS)","하라주쿠","아메카지 편집숍","패션",35.6686,139.7053,"7/1100-2000/none"],
+            [3,"이세탄 맨즈 (Isetan Men's)","신주쿠","남성 하이엔드 패션","남성패션",35.6938,139.7034,"7/1000-2000/none"],
+            [3,"시부야 파르코 (Shibuya Parco)","시부야","디자이너 브랜드","MZ픽",35.6580,139.7016,"7/1100-2100/none"],
+            [3,"시부야 스크램블 스퀘어 (Shibuya Scramble Square)","시부야","디저트 선물 샵","기념품",35.6580,139.7016,"7/1000-2100/none"],
+            [3,"긴자 식스 (Ginza Six)","긴자","럭셔리 브랜드","프리미엄",35.6712,139.7665,"7/1030-2030/none"],
+            [3,"아트모스 (Atmos)","신주쿠","스니커즈 편집숍","한정판신발",35.6938,139.7034,"7/1100-2000/none"],
+            [3,"코메효 (Komehyo)","신주쿠","중고 명품 샵","세컨핸드",35.6938,139.7034,"7/1100-2000/none"],
+            [3,"세컨드 스트릿 (2nd Street)","하라주쿠","세컨드 스트릿","구제의류",35.6686,139.7053,"7/1100-2100/none"],
+            [3,"나카노 브로드웨이 (Nakano Broadway)","나카노","피규어, 오타쿠","서브컬처",35.7089,139.6659,"7/1200-2000/none"],
+            [3,"뉴오만 (NEWoMan)","신주쿠","여성 뷰티 패션","쇼핑",35.6888,139.7003,"7/1100-2030/none"],
+            [3, "Cat Street (캣 스트리트)", "하라주쿠", "트렌디한 편집숍과 카페 거리", "매장상이", 35.6655, 139.7062, "7/1100-2000/none"],
+            [3, "Human Made Harajuku", "하라주쿠", "스트릿 브랜드 휴먼메이드 매장", "의류", 35.6682, 139.7061, "7/1100-2000/none"],
+            [3, "Hands Shibuya (핸즈 시부야점)", "시부야", "DIY 및 다양한 잡화 총망라", "잡화", 35.6621, 139.6992, "7/1000-2100/none"],
+            [3, "Tokyo Midtown Hibiya", "히비야", "투데이즈 스페셜 등 복합 라이프스타일", "복합쇼핑", 35.6735, 139.7600, "7/1100-2000/none"],
+            [3, "유니클로 긴자 글로벌 플래그십", "긴자", "세계 최대 규모의 12층 유니클로", "면세", 35.6705, 139.7645, "7/1100-2100/none"]
+        ];
+    </script>
+</body>
+</html>
