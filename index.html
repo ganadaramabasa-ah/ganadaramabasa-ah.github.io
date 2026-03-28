@@ -1170,7 +1170,7 @@ async function fetchWeather() {
             try {
                 const base64 = await resizeImage(file, 800);
                 const prompt = `이 사진이 다음 퀘스트를 성공했는지 심판처럼 평가해줘. 퀘스트: [${goal}]. 대답은 첫 줄에 무조건 [합격!] 또는 [불합격!]을 적고, 이유를 아주 재밌고 짧게 설명해.`;
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.geminiKey}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${state.geminiKey}`, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ contents: [{ parts: [{text: prompt}, {inline_data: {mime_type: "image/jpeg", data: base64.split(',')[1]}}] }] })
                 });
@@ -1211,7 +1211,7 @@ async function fetchWeather() {
             try {
                 const base64 = await resizeImage(file, 1024);
                 const prompt = "이 영수증에서 음식/물품명과 가격을 추출해서 JSON 배열로만 응답해. 형식을 반드시 맞출것: [{\"item\":\"생맥주\", \"price\":500}, {\"item\":\"야키토리\", \"price\":1200}]";
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.geminiKey}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${state.geminiKey}`, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ contents: [{ parts: [{text: prompt}, {inline_data: {mime_type: "image/jpeg", data: base64.split(',')[1]}}] }] })
                 });
@@ -1346,7 +1346,7 @@ async function fetchWeather() {
 
             try {
                 const prompt = `의도 분석 라우터. 단일 키워드만 출력. 번역/외국어=DEEPL, 교통/날씨/팩트=PERPLEXITY, 일정기획/대화=GROK, 사진=GEMINI. 질문: "${text}"`;
-                const routeReq = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.geminiKey}`, { 
+                const routeReq = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${state.geminiKey}`, { 
                     method: 'POST', 
                     headers: {'Content-Type': 'application/json'}, 
                     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) 
@@ -1390,7 +1390,7 @@ async function fetchWeather() {
         async function callGemini(txt, img) {
             try {
                 let p = [{text: txt}]; if(img) p.push({inline_data: {mime_type: "image/jpeg", data: img}});
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.geminiKey}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: p }] }) });
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${state.geminiKey}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: p }] }) });
                 const d = await res.json(); 
                 if(d.error) throw new Error(d.error.message);
                 appendChat('GEMINI', d.candidates[0].content.parts[0].text);
